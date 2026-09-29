@@ -85,10 +85,34 @@ def set_engine(scene, engine: str = "EEVEE") -> dict:
 # ============================================================ 色彩管理
 
 
-def setup_color(scene) -> dict:
-    """色彩管理四元组：Scene Linear (Rec.709) / AgX / sRGB / None"""
+def setup_color(scene, view_transform: str = "AgX") -> dict:
+    """
+    色彩管理四元组：Scene Linear (Rec.709) / AgX / sRGB / None
+
+    ⚠️ view_transform 支持 per-shot 覆盖。G0-T4 实测：AgX 会让青色系
+    自发光（法术光球 #40c8ff 等）饱和度损失达 -0.40，直接发白。
+    故关键 FX 镜头改用 Khronos PBR Neutral。
+    依据见 00_project/bible/g0_feasibility_report.md §4。
+    """
     vs = scene.view_settings
-    vs.view_transform = "AgX"
+    # ⚠️ 与 engine 同样的陷阱：5.2 的 `view_transform` **静态枚举在
+    # headless 下只有 ['NONE']**，OCIO 的 view 是动态注册的。
+    # 用枚举做校验会误判"不可用"。改为直接赋值 + 读回核对。
+    try:
+        vs.view_transform = view_transform
+    except (TypeError, ValueError) as e:
+        return {
+            "ok": False,
+            "error": f"View Transform 不可用: {view_transform} ({e})",
+            "hint": "用 bpy 交互式查看 scene.view_settings.bl_rna.properties"
+            "['view_transform'].enum_items 的实际可选值（headless 下枚举不完整）",
+        }
+    if vs.view_transform != view_transform:
+        return {
+            "ok": False,
+            "error": f"View Transform 未生效: 请求 {view_transform}，实际 {vs.view_transform}",
+            "hint": "名称与 OCIO 配置中的 view 名不一致",
+        }
     vs.look = "None"
     scene.display_settings.display_device = "sRGB"
     return {
@@ -208,10 +232,16 @@ def setup_render(
     shot: str,
     stage: str = "light",
     engine: str = "EEVEE",
+    view_transform: str = "AgX",
     project_root: str = ".",
     dry_run: bool = False,
 ) -> dict:
-    """分辨率 / 帧率 / 色彩管理 / View Layer / Pass / 输出路径"""
+    """
+    分辨率 / 帧率 / 色彩管理 / View Layer / Pass / 输出路径
+
+    view_transform 默认 AgX。G0-T4 实测 AgX 会让青色自发光发白，
+    关键 FX 镜头（sh020/030/040）应传 "Khronos PBR Neutral"。
+    """
     if stage not in STAGES:
         return {
             "ok": False,
@@ -224,6 +254,7 @@ def setup_render(
             "shot": shot,
             "stage": stage,
             "engine": engine,
+            "view_transform": view_transform,
             "dry_run": True,
             "note": "未写盘。执行内容：引擎/色彩四元组/1920x1080@24fps/EXR multilayer/Available Passes",
         }
@@ -240,7 +271,7 @@ def setup_render(
     scene = bpy.context.scene
     res = {
         "engine": set_engine(scene, engine),
-        "color": setup_color(scene),
+        "color": setup_color(scene, view_transform),
         "output": setup_output(scene, shot, stage, "v001", project_root),
         "passes": setup_passes(scene),
     }
@@ -273,6 +304,11 @@ def main():
     p.add_argument("--setup_camera", nargs=2, metavar=("SHOT", "FOCAL"))
     p.add_argument("--setup_render", nargs=2, metavar=("SHOT", "STAGE"))
     p.add_argument("--engine", default="EEVEE", choices=["EEVEE", "CYCLES"])
+    p.add_argument(
+        "--view-transform",
+        default="AgX",
+        help="AgX（默认）或 Khronos PBR Neutral（关键 FX 镜头，见 G0-T4 §4.4）",
+    )
     p.add_argument("--project-root", default=".")
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args(_argv())
@@ -286,6 +322,7 @@ def main():
             setup_render(
                 *a.setup_render,
                 engine=a.engine,
+                view_transform=a.view_transform,
                 project_root=a.project_root,
                 dry_run=a.dry_run,
             )

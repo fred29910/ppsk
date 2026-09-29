@@ -1,6 +1,6 @@
-shot_id,seq_id,description,frame_start,frame_end,shot_start,shot_end,duration_s,camera_move,focal_length,characters,environments,props,fx,light_template,status,anim_version,cfx_version,fx_version,light_version,owner,est_days,actual_days,notes
-seq010_sh010,SEQ010,远景：竹林全景，云海背景，仙师打坐,1001,1160,1009,1152,6,dolly_in,35,chr_hero,env_bamboo_forest,prp_feather_fan,fx_dust_sparkle,Cloud_Day,todo,,,,,3,,氛围镜头 重点在云海与雾
-seq010_sh020,SEQ010,中景：仙师睁眼 指尖凝聚法术光球,1001,1136,1009,1128,5,dolly_in_slow,50,chr_hero,env_bamboo_forest,,fx_magic_orb,Cloud_Day,todo,,,,,4,,法术光球为视觉焦点
-seq010_sh030,SEQ010,动作：仙师起身挥剑 剑气划破竹林,1001,1184,1009,1176,7,pan_follow,24,chr_hero,env_bamboo_forest,prp_flying_sword,fx_sword_trail,fx_dust_sparkle,Cloud_Day,todo,,,,,6,,全片高潮 剑气与竹林对比
-seq010_sh040,SEQ010,跟随：仙师御剑而起 飞向云海,1001,1160,1009,1152,6,crane_up,35,chr_hero,env_bamboo_forest,prp_flying_sword,fx_sword_trail,Cloud_Day,todo,,,,,5,,逆光剪影 尾迹
-seq010_sh050,SEQ010,远景：仙师消失于云海 竹林重归宁静,1001,1160,1009,1152,6,dolly_out,40,chr_hero,env_bamboo_forest,prp_feather_fan,fx_dust_sparkle,Cloud_Day,todo,,,,,3,,与 sh010 同机位 首尾呼应
+shot_id,seq_id,description,frame_start,frame_end,shot_start,shot_end,duration_s,camera_move,focal_length,characters,environments,props,fx,light_template,view_transform,status,anim_version,cfx_version,fx_version,light_version,owner,est_days,actual_days,notes
+seq010_sh010,SEQ010,远景：竹林全景，云海背景，仙师打坐,1001,1160,1009,1152,6,dolly_in,35,chr_hero,env_bamboo_forest,prp_feather_fan,fx_dust_sparkle,Cloud_Day,AgX,todo,,,,,3,,"氛围镜头 重点在云海与雾。FX 为暖金光屑，AgX 可接受"
+seq010_sh020,SEQ010,中景：仙师睁眼 指尖凝聚法术光球,1001,1136,1009,1128,5,dolly_in_slow,50,chr_hero,env_bamboo_forest,,fx_magic_orb,Cloud_Day,Khronos PBR Neutral,todo,,,,,4,,"法术光球主色属青色系，AgX 饱和度降 -0.40 会发白，必须换 Transform（见 G0-T4 §4.4）"
+seq010_sh030,SEQ010,动作：仙师起身挥剑 剑气划破竹林,1001,1184,1009,1176,7,pan_follow,24,chr_hero,env_bamboo_forest,prp_flying_sword,fx_sword_trail,Cloud_Day,Khronos PBR Neutral,todo,,,,,6,,"全片高潮。剑气核心与中层需保色相，换 Transform"
+seq010_sh040,SEQ010,跟随：仙师御剑而起 飞向云海,1001,1160,1009,1152,6,crane_up,35,chr_hero,env_bamboo_forest,prp_flying_sword,fx_sword_trail,Cloud_Day,Khronos PBR Neutral,todo,,,,,5,,"剑气尾迹。同 sh030 换 Transform"
+seq010_sh050,SEQ010,远景：仙师消失于云海 竹林重归宁静,1001,1160,1009,1152,6,dolly_out,40,chr_hero,env_bamboo_forest,prp_feather_fan,fx_dust_sparkle,Cloud_Day,AgX,todo,,,,,3,,"与 sh010 同机位，首尾呼应。FX 为暖金光屑"

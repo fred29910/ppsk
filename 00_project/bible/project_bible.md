@@ -20,19 +20,47 @@
 | 渲染输出 | **OpenEXR Multilayer** | 颜色 16-bit Half；数据 Pass 32-bit |
 | 传感器宽度 | 36 mm（全片统一） | 否则焦距含义会变 |
 
-## 色彩管理（四元组，锁定）
+## 色彩管理（四元组，锁定 + per-shot 例外）
 
 | 项 | 值 |
 |---|---|
 | 工作色彩空间 | **Scene Linear（Rec.709 primaries）** |
-| 显示变换 | **AgX** |
+| 显示变换（默认） | **AgX** |
+| 显示变换（**关键 FX 镜头**） | **Khronos PBR Neutral** —— 见下 |
 | 显示设备 | **sRGB** |
 | Look | **None**（per-shot 风格化另开记录，不全局改） |
 | 渲染输出 | EXR 保存场景线性，**不烘入显示变换** |
 | 交付色域 | Rec.709 |
 
-> AgX 会对高亮高饱和色去饱和，法术自发光易发白 → per-shot 换 View Transform
-> 或后期提饱和。见 `g0_feasibility_report.md` §5（T4 未完成，风险未排除）。
+### per-shot View Transform（G0-T4 实测结论）
+
+**AgX 会让青色系自发光发白。** 实测数据（strength=1.0，`orb_mid` `#40c8ff`）：
+
+| View Transform | R | G | B | 饱和度 | 判定 |
+|---|---|---|---|---|---|
+| **AgX** | 0.643 | 0.749 | 0.773 | **0.168** | ✗ 发白 |
+| Khronos PBR Neutral | 0.573 | 0.878 | 0.937 | **0.389** | ✓ |
+
+5 档 Emission Strength（0.5/1/2/4/8）× 3 种 View Transform 实测：
+AgX 全部档位发白 2–6/7，Khronos PBR Neutral 同强度只发白 1–3/7。
+**同强度换 transform 就能救回来 → 是 View Transform 问题，不是强度问题。**
+
+| 镜头 | FX | View Transform |
+|---|---|---|
+| sh010 | fx_dust_sparkle（暖金） | AgX |
+| **sh020** | **fx_magic_orb（青）** | **Khronos PBR Neutral** |
+| **sh030** | **fx_sword_trail（黄/橙）** | **Khronos PBR Neutral** |
+| **sh040** | **fx_sword_trail** | **Khronos PBR Neutral** |
+| sh050 | fx_dust_sparkle（暖金） | AgX |
+
+已落到 `00_project/pipeline/shotlist.csv` 的 `view_transform` 列，
+`setup_render` 支持 `--view-transform` 覆盖。
+
+**代价与对策**：FX 镜头与相邻镜头色调会不连续，**调色阶段（§8.2 Grade）
+必须把 FX 镜头往 AgX 基准靠**。这是本项目"同一场内两种显示变换"的已知代价。
+
+> 详细数据见 `g0_feasibility_report.md` §4。
+
 
 ## Blender 5.2 API 约束（G0 实测，务必遵守）
 
@@ -40,11 +68,16 @@
 |---|---|
 | 引擎 ID 是 `BLENDER_EEVEE` | 不是 `BLENDER_EEVEE_NEXT` |
 | **不要用 `engine` 静态枚举判断 Cycles 可用性** | `-b` 无界面模式下枚举只注册 EEVEE，即使 Cycles addon 已启用。直接赋值 `'CYCLES'`，判据是 `hasattr(scene,'cycles')` |
+| **不要用 `view_transform` 静态枚举做校验** | 同样陷阱：headless 下枚举只有 `['NONE']`。直接赋值 + 读回核对 |
 | **EXR multilayer 必须先设 `media_type`** | `media_type='MULTI_LAYER_IMAGE'` → 再 `file_format='OPEN_EXR_MULTILAYER'`。反了报枚举不存在 |
+| **帧序列占位符用 `#` 不是 `%04d`** | `%04d` 会被当普通字符，产出 `xxx.%04d.exr0023.exr` 双扩展名 |
 | **EEVEE 没有 Volume Pass** | 无 `use_pass_volume`。雾无法靠 Pass 分离 → 支持 §2.2 "雾主要走合成层" |
+| **合成器在 headless 下会崩** | `CompositorNodeImage` 渲染即崩（连 pass-through 也崩）。`scene.node_tree` → `compositing_node_group`；`CompositorNodeComposite` 节点已不存在。烧录改走 VSE |
+| VSE：`sequences` → `strips` | `new_effect` 参数是 `length` 不是 `frame_end`；文字 `location` 原点在**左下** |
+| `bpy.data.images.load` 读不了 multilayer EXR | 返回 size (0,0)。用 Blender 自带 `OpenImageIO`（3.1.13.1），通道名形如 `ViewLayer.Combined.R` |
+| EXR 不含显示变换 | 评 View Transform 必须在**渲染时**套上再读 PNG；读 EXR 拿不到。且 bpy 的 `image.pixels` 也不套用 |
+| 本机 ffmpeg 无 `drawtext` | 静态构建无 libfreetype。烧录走 Blender VSE（§6.1 要求） |
 | Workbench 在 `-b` 下全黑 | 无 GL 上下文，不可用于自动化检查 |
-| ffmpeg 读不了 multilayer EXR | `create_preview` 必须先 `exr_extract_layer()` 抽层 |
-| Python OpenEXR 绑定缺失 | 逐像素读 EXR 走 Blender bpy |
 
 ## 云雾双轨方案（沿用 plan.md §2.2）
 
@@ -90,11 +123,14 @@ G0 实测确认 §2.2 限制成立：EEVEE 的雾**不进入反射/折射**（EE
 ## 待办
 
 - [ ] 渲染机确认同版本同 build hash
-- [ ] 渲染机补做 T3 / T4 / T5 / T6 Pass 齐全性
-- [ ] `project_bible.md` 与 `docs/plan.md` 的 5.2.1 表述同步（本文件为准）
+- [ ] 渲染机补做 T3（10k 实例 GN 散布 + 计时）、T5（色彩全链路，需 Resolve）
+- [ ] 调色阶段把 FX 镜头（Khronos）往 AgX 基准靠，保色调连续
+- [ ] 色彩脚本补记 per-shot View Transform 决策（§9.3 要求）
+- [ ] 美术设定补图（W1 要求的是图，当前只有文字描述）
 
 ## 修订记录
 
 | 日期 | 变更 |
 |---|---|
 | 2026-09-29 | 锁定版本由 plan.md 的 5.2.1 改为实测的 **5.2.0**；写入 build hash；填入色彩四元组、帧号推导、5.2 API 约束、本机工具现状 |
+| 2026-09-29 | G0-T4 补测完成：**AgX 让青色自发光发白**（饱和度 -0.40），关键 FX 镜头 per-shot 换 Khronos PBR Neutral。已落 shotlist `view_transform` 列 + `setup_render --view-transform`。补充合成器崩溃、VSE API、OIIO 读 EXR 等 5.2 约束 |

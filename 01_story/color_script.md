@@ -10,7 +10,7 @@
 | 角色 | 仙师（侠客）× 1 |
 | 场景 | 竹林（云海远景） |
 | 对白 | 无（音乐叙事） |
-| 色彩管理 | Scene Linear (Rec.709) / AgX / sRGB / None |
+| 色彩管理 | Scene Linear (Rec.709) / **AgX（FX 镜头用 Khronos PBR Neutral）** / sRGB / None |
 
 ---
 
@@ -311,12 +311,38 @@ sh010        sh020        sh030        sh040        sh050
 
 ## 五、色彩管理备注
 
+> ⚠️ 本节已按 G0-T4 实测结果修订（2026-09-29）。原文"AgX 不会过曝"的判断不成立。
+
 1. **色彩空间**：所有色值为 sRGB 显示参考值，实际制作在 Scene Linear (Rec.709) 空间进行。
-2. **视图变换**：AgX 会压缩高光，剑气核心 `#fff8e0` 在 AgX 下呈现柔和白金色，不会过曝。
-3. **Look 设置**：None（无额外调色），保持色彩自然还原。
+2. **视图变换（per-shot）**：**本项目使用两种显示变换**，这是 G0 实测的结论，不是可选项。
+
+   | 镜头 | FX | View Transform |
+   |---|---|---|
+   | sh010 | fx_dust_sparkle（暖金） | AgX |
+   | **sh020** | **fx_magic_orb（青）** | **Khronos PBR Neutral** |
+   | **sh030** | **fx_sword_trail** | **Khronos PBR Neutral** |
+   | **sh040** | **fx_sword_trail** | **Khronos PBR Neutral** |
+   | sh050 | fx_dust_sparkle（暖金） | AgX |
+
+   **实测数据**（Emission Strength = 1.0，法术光球中层 `#40c8ff`）：
+
+   | View Transform | R | G | B | 饱和度 | 判定 |
+   |---|---|---|---|---|---|
+   | AgX | 0.643 | 0.749 | 0.773 | **0.168** | ✗ 发白 |
+   | Khronos PBR Neutral | 0.573 | 0.878 | 0.937 | **0.389** | ✓ |
+
+   扫 5 档自发光强度（0.5/1/2/4/8）确认：AgX 各档都发白 2–6/7，
+   Khronos 同强度只发白 1–3/7。**青色系受害最重**，正是法术光球主色。
+
+   完整数据见 `00_project/bible/g0_feasibility_report.md` §4。
+
+3. **Look 设置**：None（无额外调色）。
 4. **显示输出**：sRGB 显示空间。
-5. **软件设置建议**：Blender / Maya 中设置 View Transform = AgX, Look = None, Display = sRGB。
-6. **LUT 建议**：如需预览，可加载 AgX Base Contrast 或 Medium High Contrast LUT 作为监看参考。
+5. **软件设置**：Blender 中 View Transform 按上表逐镜设置；已落 `shotlist.csv`
+   的 `view_transform` 列，`setup_render --view-transform` 支持。
+6. **调色注意**：FX 镜头用 Khronos、非 FX 用 AgX，**同一场内会有两种色调**。
+   调色阶段必须把 FX 镜头往 AgX 基准靠，保色调连续。
+7. **LUT 建议**：如需预览，可加载 AgX Base Contrast 或 Medium High Contrast LUT 作为监看参考。
 
 ---
 
