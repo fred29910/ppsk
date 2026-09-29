@@ -1,0 +1,28 @@
+# Blender
+*.blend1
+*.blend@
+*.blend#
+
+# 缓存与渲染
+06_shots/*/cache/*
+06_shots/*/render/*
+
+# 审阅与交付
+07_review/*
+08_delivery/*
+
+# 系统
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 大型二进制
+*.exr
+*.abc
+*.usd
+*.vdb
