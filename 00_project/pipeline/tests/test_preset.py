@@ -3,7 +3,10 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import bpy
+try:
+    import bpy
+except ImportError:  # 纯 Python 环境（系统 python3）没有 bpy，整模块跳过
+    raise unittest.SkipTest("需要 bpy，请在 Blender 内运行")
 import utils
 import shot
 
