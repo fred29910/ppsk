@@ -21,6 +21,12 @@ import os
 import subprocess
 import sys
 
+# Blender 以 --python 运行时不会把脚本目录加入 sys.path，
+# 同目录的 utils 就 import 不到。手动补上。
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
 import utils
 
 
