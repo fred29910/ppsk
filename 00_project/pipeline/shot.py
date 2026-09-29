@@ -176,6 +176,55 @@ def setup_passes(scene, passes=None) -> dict:
     return {"ok": True, "enabled": enabled, "skipped": skipped}
 
 
+def apply_preset(
+    scene,
+    *,
+    shot: str,
+    stage: str,
+    version: str = "v001",
+    view_transform: str | None = None,
+    engine: str = "EEVEE",
+    project_root: str = ".",
+) -> dict:
+    """
+    渲染设置唯一入口。setup_render 与 build_templates 共用这一份实现。
+
+    覆盖：分辨率 / fps / 公制单位 / 帧范围（1001 起 + 8 handles）/
+    快门 0.5 帧 / 运动模糊关 + Vector 开 / 色彩四元组 / EXR multilayer /
+    帧序列 #### 占位符 / 全部可用 View Layer Pass。
+
+    ⚠️ 不设 volumetric_samples / taa_render_samples：本机无 GPU，
+    采样数由渲染机决定（spec §11）。
+    """
+    if stage not in STAGES:
+        return {"ok": False, "error": f"未知环节: {stage}",
+                "hint": f"合法值: {', '.join(STAGES)}"}
+
+    # 引擎交给 set_engine 处理（"EEVEE"→"BLENDER_EEVEE" / "CYCLES" 分支）
+    scene.unit_settings.system = "METRIC"
+    scene.unit_settings.scale_length = 1.0
+    scene.frame_start = utils.FRAME_START
+    scene.frame_end = utils.FRAME_START + 2 * utils.HANDLE_FRAMES
+    scene.frame_current = utils.FRAME_START + utils.HANDLE_FRAMES
+    # ⚠️ 单位是帧不是角度（utils.shutter_frames 已封装换算）
+    scene.render.motion_blur_shutter = utils.shutter_frames()
+    scene.render.use_motion_blur = False   # D7：与 Vector Pass 互斥，选后者
+
+    res = {
+        "engine": set_engine(scene, engine),
+        "color": setup_color(scene, view_transform or utils.VIEW_TRANSFORM),
+        "output": setup_output(scene, shot, stage, version, project_root),
+        "passes": setup_passes(scene),
+    }
+    failed = {k: v for k, v in res.items() if not v.get("ok")}
+    if failed:
+        return {"ok": False,
+                "error": "; ".join(f"{k}: {v['error']}" for k, v in failed.items()),
+                "hint": "见 g0_feasibility_report.md 附录",
+                **res}
+    return {"ok": True, "warnings": [], **res}
+
+
 # ============================================================ 镜头
 
 
@@ -227,14 +276,15 @@ def setup_render(
     shot: str,
     stage: str = "light",
     engine: str = "EEVEE",
-    view_transform: str = "AgX",
+    view_transform: str | None = None,
     project_root: str = ".",
     dry_run: bool = False,
 ) -> dict:
     """
     分辨率 / 帧率 / 色彩管理 / View Layer / Pass / 输出路径
 
-    view_transform 默认 AgX。G0-T4 实测 AgX 会让青色自发光发白，
+    view_transform 默认 None，由 apply_preset 兜底成 utils.VIEW_TRANSFORM
+    （AgX）。G0-T4 实测 AgX 会让青色自发光发白，
     关键 FX 镜头（sh020/030/040）应传 "Khronos PBR Neutral"。
     """
     if stage not in STAGES:
@@ -264,17 +314,11 @@ def setup_render(
         }
 
     scene = bpy.context.scene
-    res = {
-        "engine": set_engine(scene, engine),
-        "color": setup_color(scene, view_transform),
-        "output": setup_output(scene, shot, stage, "v001", project_root),
-        "passes": setup_passes(scene),
-    }
-    failed = {k: v for k, v in res.items() if not v.get("ok")}
-    if failed:
-        return {"ok": False, "error": "; ".join(f"{k}: {v['error']}" for k, v in failed.items()),
-                "hint": "见 g0_feasibility_report.md 附录"}
-    return {"ok": True, "shot": shot, "stage": stage, **res}
+    r = apply_preset(scene, shot=shot, stage=stage, engine=engine,
+                     view_transform=view_transform, project_root=project_root)
+    if not r.get("ok"):
+        return {"ok": False, "error": r.get("error"), "hint": r.get("hint")}
+    return {"ok": True, "shot": shot, "stage": stage, **r}
 
 
 # ============================================================ CLI
@@ -301,8 +345,8 @@ def main():
     p.add_argument("--engine", default="EEVEE", choices=["EEVEE", "CYCLES"])
     p.add_argument(
         "--view-transform",
-        default="AgX",
-        help="AgX（默认）或 Khronos PBR Neutral（关键 FX 镜头，见 G0-T4 §4.4）",
+        default=None,
+        help="默认 utils.VIEW_TRANSFORM（AgX）；关键 FX 镜头用 Khronos PBR Neutral（G0-T4 §4.4）",
     )
     p.add_argument("--project-root", default=".")
     p.add_argument("--dry-run", action="store_true")
