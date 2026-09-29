@@ -4,7 +4,7 @@
 > **Blender**：`/opt/data/dev/blender-5.2.0-linux-x64/blender` — 5.2.0 LTS，build hash `fbe6228777e7`
 > **日期**：2026-09-29
 > **修订**：v2 — **推翻 v1 的 T1 结论与 §4.1**。v1 的 T1 测量方法有缺陷，Cycles 探测方法也错了。
-**v2 补充**：管线代码实测又发现 4 个新问题（§6.4–6.7），均已修复。
+**v2 补充**：管线代码实测又发现 8 个新问题（§6.2–6.7），均已修复。
 > **结论**：🟡 **T1 通过、T2 部分通过**；T3/T4/T5 因环境条件未完成；T6 部分通过
 
 ---
@@ -229,21 +229,52 @@ No such filter: 'drawtext'
 
 字体文件本身齐全（`/usr/share/fonts/` 有 Noto、FreeMono 等），**缺的是 filter**。
 
-**影响**：`create_preview` 在本机**无法产出合规审阅片**。
+**影响**：`create_preview` 在本机**无法用 ffmpeg 产出合规审阅片**。
 
-`create_preview` 已加前置探测，缺 drawtext 时**明确报错而非静默跳过烧录**：
+### 6.5.1 决策与实现：改用 Blender VSE 烧录（已实测通过）
+
+**已改用 Blender VSE 的 Text strip 烧录**，不依赖 ffmpeg 的 drawtext。
+
+实现路径（`pipeline/review.py` 的 `burn_in_frame()`）：
 
 ```python
-{"ok": False,
- "error": "ffmpeg 缺少 drawtext filter（未编译 libfreetype）",
- "hint": "§6.1 要求烧录镜号+阶段+版本+帧号+时码，缺 drawtext 无法满足。
-          换用带 libfreetype 的 ffmpeg 构建，或用 Blender 合成器烧录后输出"}
+sc.sequence_editor_create()
+se = sc.sequence_editor                      # ⚠️ 5.2 是 strips，不是 sequences
+se.strips.new_image("plate", src_exr, channel=1, frame_start=1)
+txt = se.strips.new_effect("burn", type="TEXT", channel=2,
+                           frame_start=1, length=1)   # ⚠️ 参数是 length，不是 frame_end
+txt.text = f"{shot} {stage} {version}  frame={n}  tc={timecode}"
+txt.font_size = max(12, int(h * 0.10))
+txt.location = (0.02, 0.05)                  # ⚠️ 原点在左下，不是左上
+sc.render.use_sequencer = True
+sc.render.use_compositing = False            # 合成器路线在 5.2 headless 会崩
 ```
 
-无烧录版本（`-c:v libx264`，无 `-vf`）实测可出，4 帧 320×180 → 0.167 s，
-但**不合规**，仅供内部快速预览。
+**为什么不用合成器**：实测 Blender 5.2 headless 下 `CompositorNodeImage` → 渲染
+**会崩溃**（连纯 pass-through 也崩，写 `/tmp/blender.crash.txt`）。
+另有 API 变化：`scene.node_tree` 已移除，改 `scene.compositing_node_group`，
+且 `CompositorNodeComposite` 节点在 5.2 不存在。VSE 路线无此问题。
 
-**待决策**：渲染机上换 ffmpeg 构建，还是改用 Blender 合成器烧录。
+**实测结果**（4 帧，端到端）：
+
+```
+create_preview → {'ok': True, 'frames': 4, 'output': .../seq010_sh010_light_v001_burn.mp4'}
+ffprobe → h264, 320x180, nb_frames=4
+烧录内容验证 → 画面左下可见 "light v001" 与 "tc=00:00:41:18"（帧 1003 @ 24fps，正确）
+```
+
+烧录信息含 §6.1 要求的全部五项：镜号、阶段、版本、帧号、时码。
+
+### 6.5.2 过程中发现并修复的 3 个 bug
+
+| # | Bug | 现象 | 修法 |
+|---|---|---|---|
+| 1 | staging 文件名与 ffmpeg `-i` 模式不匹配 | 抽层输出 `{shot}_{stage}_{version}.{frame}.exr`，ffmpeg 期待 `{shot}_%04d.exr` → "Could find no file" | staging 统一命名 `{shot}_{n:04d}.exr`；错误信息里附带 staging 实际内容 |
+| 2 | VSE 动画渲染双扩展名 | 产出 `xxx.exr0001.exr` | filepath 用 `####` 占位符，产出后 `os.replace` 归位 |
+| 3 | 合成器路线崩溃 | 5.2 headless 下 CompositorNodeImage 渲染即崩 | 改走 VSE |
+
+**教训**：验证"烧录是否成功"时，我一度裁错画面区域（先裁顶部、后裁底部看旧文件），
+误判为烧录失败。**验证像素前必须确认裁剪坐标与文件版本对应。**
 
 ### 6.6 发现 6：帧序列占位符用 `#` 不是 `%04d`
 
@@ -348,21 +379,21 @@ EEVEE 体积在本机可用、Cycles 可用、§2.2 双轨方案两轨都保留�
 | 4 | 帧序列占位符 `#` 不用 `%04d` | `pipeline/shot.py` | ✅ 文件名实测正确 |
 | 5 | Cycles 分支不用枚举，用 `hasattr(scene,'cycles')` | `pipeline/shot.py` → `set_engine` | ✅ EEVEE/Cycles 双分支 |
 | 6 | `exr_extract_layer()` 走 Blender 自带 OIIO | `pipeline/review.py` | ✅ 抽出 ffmpeg 可读单层 EXR |
-| 7 | `create_preview` 前置探测 drawtext，缺则明确报错 | `pipeline/review.py` | ✅ 错误信息可操作 |
+| 7 | **VSE Text strip 烧录**（ffmpeg 无 drawtext） | `pipeline/review.py` → `burn_in_frame` | ✅ 端到端实测，烧录内容经像素验证 |
 | 8 | `sys.argv` 切掉 Blender 自身参数 | `pipeline/shot.py`、`review.py` | ✅ CLI 可用 |
 | 9 | 记录 EEVEE 无 Volume Pass + 5.2 API 约束 | `project_bible.md` | — |
 | 10 | 清理冲突的 `01_story/shotlist.csv` | 仓库 | ✅ 已删，重写 pipeline 版 |
 | 11 | shotlist 帧号按 §13 修正（frame/shot 原来写反了） | `pipeline/shotlist.csv` | ✅ 有效帧 720 / 渲染帧 800 |
 | 12 | 资产命名校验（拒 `final2` 等） | `pipeline/utils.py` | ✅ |
+| 13 | plan.md 版本锁 5.2.1 → 5.2.0（8 处） | `docs/plan.md` | ✅ 与 Bible 一致 |
 
 ### 9.3 仍待决策
 
 | # | 事项 | 说明 |
 |---|---|---|
-| 1 | **ffmpeg drawtext** | 本机静态构建无 libfreetype，§6.1 烧录审阅片做不出。换 ffmpeg 构建，还是改用 Blender 合成器烧录？ |
-| 2 | 渲染机 ffmpeg | 渲染机若同样是静态构建，同样阻塞 |
-| 3 | T3 / T4 / T5 | 需 GPU / 需 Resolve |
-| 4 | `docs/plan.md` 的 5.2.1 表述 | 与 Bible 的 5.2.0 不一致，以 Bible 为准，建议同步 plan.md |
+| 1 | T3 / T4 / T5 | 需 GPU（渲染机）/ 需 DaVinci Resolve |
+| 2 | 渲染机是否需复核 | 本机无 GPU、非渲染机；渲染机上 3 个环境问题（drawtext、合成器崩溃、OIIO 行为）是否一致需验证，但 VSE 烧录路线不依赖 GPU |
+| 3 | 美术设定仍是文字 | W1 要求"主角三视图 + 竹林气氛图"等**图**，当前是 646 行文字描述。需补图或改用图像生成工具 |
 
 
 ### 9.3 探针脚本（已验证可复现）

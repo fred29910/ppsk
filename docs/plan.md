@@ -2,7 +2,8 @@
 
 > **目标**：基于 `docs/dls.md` 管线规范，规划一部**仙侠题材 3D 动画短片（Demo）**的开发计划。Demo 的首要目的是**验证管线与锁定风格**，其次才是"讲一个故事"。
 > **适用范围**：个人或 2–3 人小团队，以 Blender 为核心 DCC，优先纯 Blender 方案。
-> **锁定版本**：Blender **5.2.1 LTS**（锁定到 patch 版本，非 "5.2"；首次部署时把完整 build hash 记入 `00_project/bible/project_bible.md`）。项目中途不升级、不跨 patch 混用。
+> **锁定版本**：Blender **5.2.0 LTS**（锁定到 patch 版本，非 "5.2"；build hash `fbe6228777e7` 已记入 `00_project/bible/project_bible.md`）。项目中途不升级、不跨 patch 混用。
+> **v2.1 修订**：原写 5.2.1 LTS。G0 实测（W0）本机可用版本为 **5.2.0 LTS**，且 §12.1 规定版本不符即退出 —— 若继续锁 5.2.1，全部管线函数无法运行。故锁定改为实测值 5.2.0。依据见 `00_project/bible/g0_feasibility_report.md`。
 > **基准场景**：本文件所有预算、排期、里程碑默认按**方案 S（30 秒）**执行。方案 M（90 秒）为升档目标，见附录 B。
 
 ### 本次修订说明（v2）
@@ -352,7 +353,7 @@ stateDiagram-v2
 
 | 项目 | 设定值 |
 |---|---|
-| Blender 版本 | **5.2.1 LTS**（锁 patch，build hash 记入 Bible） |
+| Blender 版本 | **5.2.0 LTS**（锁 patch，build hash `fbe6228777e7` 记入 Bible） |
 | 分辨率 | 1920×1080（16:9）；降级档 1600×900 |
 | 帧率 | 24 fps |
 | 画幅遮罩 | Layout 阶段启用 16:9 + 9:16 双安全框 |
@@ -580,7 +581,7 @@ flowchart LR
 - 所有函数返回 `dict`，成功含 `{"ok": True, ...}`，失败含 `{"ok": False, "error": str, "hint": str}`；
 - **只读函数绝不写盘**；写盘函数必须 `--dry-run` 可用；
 - 所有函数接受 `--project-root`，不使用硬编码路径；
-- 启动即校验 Blender 版本 == `5.2.1`，不匹配直接退出。
+- 启动即校验 Blender 版本 == `5.2.0`，不匹配直接退出（`pipeline/utils.py` 的 `check_blender_version()` 已实现）。
 
 ### 12.2 适合本项目的 AI Agent 任务
 
@@ -774,7 +775,7 @@ flowchart LR
 
 ### 16.3 Credits 要求
 
-片尾 Credits 至少包含：制作人员、**全部需要署名的外部素材**、使用的工具（Blender 5.2.1 LTS 等）、AI 生成内容声明（如有）、音乐授权编号。
+片尾 Credits 至少包含：制作人员、**全部需要署名的外部素材**、使用的工具（Blender 5.2.0 LTS 等）、AI 生成内容声明（如有）、音乐授权编号。
 
 ---
 
@@ -822,7 +823,7 @@ flowchart LR
 - 合成工程、调色工程、剪辑工程（EDL / OTIO）、混音工程 + stems
 - `00_project/pipeline/` 代码 + **build hash**
 - `project_bible.md`、`licensing.csv`、`shotlist.csv`、授权文件
-- **Blender 5.2.1 LTS 安装包**（离线）
+- **Blender 5.2.0 LTS 安装包**（离线）
 
 ### 18.2 备份策略
 
@@ -860,7 +861,7 @@ flowchart LR
 | 云雾体积渲染过慢 | 渲染爆炸 | 远景走合成雾；近景体积缓存；必要时局部 Cycles 低采样 |
 | FX 参数难以控制 | 反复返工 | FX 封装为 Asset 预设，参数面板化；先做 1 镜验证 |
 | 绑定返工 | 权重丢失、动画白做 | 拓扑锁定后不动；ROM 测试自动化，每次修改强制跑 |
-| **5.2 patch 漂移**（5.2.1 已发布） | 跨 patch 混用出现 Pass 名称/节点参数差异 | 锁 patch + 记录 build hash；节点不跨机器版本 |
+| **5.2 patch 漂移** | 跨 patch 混用出现 Pass 名称/节点参数差异 | 锁 **5.2.0** + 记录 build hash `fbe6228777e7`；节点不跨机器版本 |
 | **资产库来源失效 / 许可变更** | 无法重渲或违规使用 | 授权登记 + 归档时保存素材副本（§16、§18.1） |
 | 概念图与 3D 成品不一致 | 后期调色救不回来 | 色彩脚本 + 关键帧概念图在前期锁定；灯光模板强制执行 |
 | 渲染农场调度复杂 | 个人精力分散 | 先用单机串行跑通；Flamenco 只做最后批量渲染 |
@@ -942,7 +943,7 @@ Demo 的目的是"验证管线与风格"（第 3 行自己写的），所以成�
 ### 22.2 W0 必做
 
 - [ ] **G0 技术可行性验证**：6 项测试（§5.0）→ `00_project/bible/g0_feasibility_report.md`
-- [ ] **锁定 Blender 5.2.1 LTS**，记录 build hash 到 Bible
+- [x] **锁定 Blender 5.2.0 LTS**，build hash `fbe6228777e7` 已记入 Bible
 - [ ] **色彩全链路验证**（§9.1）— 不通过不许往下走
 - [ ] EEVEE 体积 / probe 上限实测（§2.2、§7.4）
 
@@ -1070,7 +1071,7 @@ Demo 的目的是"验证管线与风格"（第 3 行自己写的），所以成�
 | 结论 | 来源 |
 |---|---|
 | Blender **5.2 LTS** 于 2026-07-14 发布，支持至 2028 年 7 月 | [blender.org 5.2 LTS 发布公告](https://www.blender.org/press/blender-5-2-lts-release/)、[Release Notes](https://developer.blender.org/docs/release_notes/5.2/) |
-| **5.2.1 LTS** 已于 2026-08-25 发布 → 必须锁 patch | [Blender 5.2 Releases](https://www.blender.org/releases/5-2/) |
+| **5.2.x 各 patch 间 API 有差异** → 必须锁 patch。本项目锁 **5.2.0**，build hash `fbe6228777e7` | [Blender 5.2 Releases](https://www.blender.org/releases/5-2/) |
 | 5.2 官方引擎名为 **EEVEE**（非 "Eevee Next"），且重写了 Screen Space Raytracing 与 Fast GI，画面较 5.1 略暗 | 5.2 Release Notes · EEVEE & Viewport |
 | EEVEE 体积限制：仅单次散射、只对相机光线、不进反射与 probe、体积阴影不投到实体物体 | [EEVEE 5.2 手册 · Limitations](https://docs.blender.org/manual/en/latest/render/eevee/limitations/limitations.html) |
 | Light probe 上限：128 sphere / 视锥内 16 plane；probe capture 不支持镜面反射 | 同上 |
