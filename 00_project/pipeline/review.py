@@ -21,7 +21,7 @@ import os
 import subprocess
 import sys
 
-FPS = 24
+import utils
 
 
 def exr_extract_layer(
@@ -214,8 +214,9 @@ def burn_in_frame(src_exr: str, dst_exr: str, text: str, dry_run: bool = False) 
         }
 
 
-def _timecode(frame: int, fps: int = FPS) -> str:
+def _timecode(frame: int, fps: int | None = None) -> str:
     """帧号 → 时码 HH:MM:SS:FF"""
+    fps = fps or utils.FPS
     f = frame - 1
     ff = f % fps
     total_s = f // fps
@@ -364,23 +365,28 @@ def _argv() -> list:
     return sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 
 
-p = argparse.ArgumentParser(prog="review.py")
-p.add_argument("--create_preview", nargs=3, metavar=("SHOT", "VERSION", "STAGE"))
-p.add_argument("--frame-range", nargs=2, type=int, metavar=("START", "END"))
-p.add_argument("--project-root", default=".")
-p.add_argument("--dry-run", action="store_true")
-_a = p.parse_args(_argv())
+def main():
+    p = argparse.ArgumentParser(prog="review.py")
+    p.add_argument("--create_preview", nargs=3, metavar=("SHOT", "VERSION", "STAGE"))
+    p.add_argument("--frame-range", nargs=2, type=int, metavar=("START", "END"))
+    p.add_argument("--project-root", default=".")
+    p.add_argument("--dry-run", action="store_true")
+    _a = p.parse_args(_argv())
 
-if _a.create_preview:
-    fs, fe = _a.frame_range if _a.frame_range else (1001, 1136)
-    print(
-        create_preview(
-            *_a.create_preview,
-            frame_start=fs,
-            frame_end=fe,
-            project_root=_a.project_root,
-            dry_run=_a.dry_run,
+    if _a.create_preview:
+        fs, fe = _a.frame_range if _a.frame_range else (1001, 1136)
+        print(
+            create_preview(
+                *_a.create_preview,
+                frame_start=fs,
+                frame_end=fe,
+                project_root=_a.project_root,
+                dry_run=_a.dry_run,
+            )
         )
-    )
-else:
-    p.print_help()
+    else:
+        p.print_help()
+
+
+if __name__ == "__main__":
+    main()

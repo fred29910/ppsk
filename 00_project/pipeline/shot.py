@@ -15,12 +15,7 @@ Blender 5.2 实测约束（见 00_project/bible/g0_feasibility_report.md）：
 import argparse
 import os
 
-# ---- 项目规格（与 project_bible.md 保持一致）----
-BLENDER_VERSION = "5.2.0"
-RESOLUTION = (1920, 1080)
-FPS = 24
-SHUTTER_ANGLE = 180.0
-SENSOR_WIDTH = 36.0
+import utils
 
 STAGES = ("layout", "anim", "cfx", "fx", "light", "comp")
 
@@ -134,9 +129,9 @@ def setup_output(scene, shot: str, stage: str, version: str, project_root: str =
     反过来会报 enum "OPEN_EXR_MULTILAYER" not found。
     """
     r = scene.render
-    r.resolution_x, r.resolution_y = RESOLUTION
+    r.resolution_x, r.resolution_y = utils.RESOLUTION
     r.resolution_percentage = 100
-    r.fps = FPS
+    r.fps = utils.FPS
     r.film_transparent = False
 
     ims = r.image_settings
@@ -222,9 +217,9 @@ def setup_camera(shot: str, focal_length: float = 50.0) -> dict:
         "ok": True,
         "shot": shot,
         "focal_length": focal_length,
-        "sensor_width": SENSOR_WIDTH,
-        "shutter_angle": SHUTTER_ANGLE,
-        "fps": FPS,
+        "sensor_width": utils.SENSOR_WIDTH,
+        "shutter_angle": utils.SHUTTER_ANGLE,
+        "fps": utils.FPS,
     }
 
 
@@ -331,4 +326,5 @@ def main():
         p.print_help()
 
 
-main()
+if __name__ == "__main__":
+    main()

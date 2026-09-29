@@ -15,6 +15,8 @@ FPS = 24
 RESOLUTION = (1920, 1080)
 HANDLE_FRAMES = 8
 FRAME_START = 1001
+SHUTTER_ANGLE = 180.0    # 度。写进 Blender 时必须过 shutter_frames() 换算
+SENSOR_WIDTH = 36.0      # mm，全片统一（project_bible.md 锁定）
 
 # 色彩管理四元组
 VIEW_TRANSFORM = "AgX"
@@ -24,6 +26,17 @@ COLOR_SPACE = "Scene Linear (Rec.709)"
 
 _ASSET_TYPES = ("chr", "env", "prp", "veh", "fx")
 _NAME_RE = re.compile(r"^(chr|env|prp|veh|fx)_[a-z0-9]+(_[a-z0-9]+)?$")
+
+
+REQUIRED_VERSION_PREFIX = ".".join(BLENDER_VERSION.split(".")[:2])
+
+
+def shutter_frames() -> float:
+    """快门角度（度）→ Blender 的 motion_blur_shutter（帧）。180° → 0.5 帧。
+
+    ⚠️ 单位是帧不是角度。直接写 180.0 会得到 180 帧的运动模糊且**不报错**。
+    """
+    return SHUTTER_ANGLE / 360.0
 
 
 def check_blender_version(strict: bool = True) -> dict:
@@ -46,13 +59,20 @@ def check_blender_version(strict: bool = True) -> dict:
     bh = bpy.app.build_hash
     bh = bh.decode() if isinstance(bh, bytes) else bh
 
-    if ver != BLENDER_VERSION:
-        msg = f"Blender 版本不符: {ver} != {BLENDER_VERSION}"
+    if not ver.startswith(utils_required := REQUIRED_VERSION_PREFIX + "."):
+        msg = f"Blender 版本不符: {ver} 需 {REQUIRED_VERSION_PREFIX}.x"
         if strict:
-            raise SystemExit(f"[FATAL] {msg}\n  项目锁 {BLENDER_VERSION}，不跨 patch 混用")
+            raise SystemExit(f"[FATAL] {msg}\n  项目锁 {BLENDER_VERSION}，不跨 major.minor 混用")
         return {"ok": False, "error": msg, "hint": "改 BLENDER_VERSION 或用正确版本"}
 
-    return {"ok": True, "version": ver, "build_hash": bh}
+    # build hash 不同**不失败**：本机是 dev build，官方 5.2.0 发行版 hash 必然不同
+    warnings = []
+    if bh != BLENDER_BUILD_HASH:
+        warnings.append(
+            f"build hash 与记录不符: 记录 {BLENDER_BUILD_HASH}，实际 {bh}；"
+            f"继续执行但请确认渲染机一致"
+        )
+    return {"ok": True, "version": ver, "build_hash": bh, "warnings": warnings}
 
 
 def normalize_name(name: str) -> str:
