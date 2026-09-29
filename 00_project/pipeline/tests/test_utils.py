@@ -64,3 +64,22 @@ class TestLocks(unittest.TestCase):
             utils.REQUIRED_VERSION_PREFIX,
             ".".join(utils.BLENDER_VERSION.split(".")[:2]),
         )
+
+
+class TestObjectName(unittest.TestCase):
+    def test_keeps_uppercase_prefix(self):
+        """normalize_name 会转小写，违反 dls.md 的 GEO_/CAM_/LGT_ 前缀规范"""
+        self.assertEqual("CAM_cam", utils.make_object_name("CAM", "cam"))
+        self.assertEqual("GEO_grayball", utils.make_object_name("GEO", "grayball"))
+        self.assertEqual("LGT_key", utils.make_object_name("LGT", "key"))
+
+    def test_normalize_name_is_for_asset_ids(self):
+        """资产 ID 走 normalize_name（小写下划线），与对象名划清边界"""
+        self.assertEqual("chr_hero", utils.normalize_name("CHR-Hero"))
+
+    def test_strips_illegal_chars(self):
+        # `-` 和空格各换成一个 `_`，两个不同字符之间不会合并
+        self.assertEqual("GEO_a_b_c", utils.make_object_name("GEO", "a-b c"))
+
+    def test_empty_name_returns_prefix(self):
+        self.assertEqual("GEO", utils.make_object_name("GEO", "---"))

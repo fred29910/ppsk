@@ -140,3 +140,15 @@ def metadata_template(asset: str, version: str, author: str, notes: str = "") ->
         "blender_version": BLENDER_VERSION,
         "blender_build_hash": BLENDER_BUILD_HASH,
     }
+
+
+def make_object_name(prefix: str, name: str) -> str:
+    """对象名：保留 dls.md 规定的大写前缀，如 CAM_cam / GEO_grayball。
+
+    资产 ID 才用 normalize_name（小写下划线）。两者不可混用：
+    normalize_name 会转小写，用它处理对象名会得到 geo_grayball，
+    违反命名规范。
+    """
+    clean = re.sub(r"[^A-Za-z0-9_]", "_", name)
+    clean = re.sub(r"_+", "_", clean).strip("_")
+    return f"{prefix}_{clean}" if clean else prefix
