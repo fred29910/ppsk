@@ -1,9 +1,58 @@
 """
 通用工具函数
+
+项目规格常量也放在这里，pipeline 各模块与 project_bible.md 保持一致。
 """
 
 import os
 import re
+import sys
+
+# ---- 锁定规格（Blender 5.2.0，build fbe6228777e7）----
+BLENDER_VERSION = "5.2.0"
+BLENDER_BUILD_HASH = "fbe6228777e7"
+FPS = 24
+RESOLUTION = (1920, 1080)
+HANDLE_FRAMES = 8
+FRAME_START = 1001
+
+# 色彩管理四元组
+VIEW_TRANSFORM = "AgX"
+LOOK = "None"
+DISPLAY_DEVICE = "sRGB"
+COLOR_SPACE = "Scene Linear (Rec.709)"
+
+_ASSET_TYPES = ("chr", "env", "prp", "veh", "fx")
+_NAME_RE = re.compile(r"^(chr|env|prp|veh|fx)_[a-z0-9]+(_[a-z0-9]+)?$")
+
+
+def check_blender_version(strict: bool = True) -> dict:
+    """
+    启动即校验 Blender 版本。
+
+    project_bible.md 锁定 5.2.0 / build fbe6228777e7。
+    版本不符时按 §12.1 约定直接退出。
+    """
+    try:
+        import bpy
+    except ImportError:
+        return {
+            "ok": False,
+            "error": "不在 Blender 环境中",
+            "hint": f"blender -b --factory-startup --python {sys.argv[0]} ...",
+        }
+
+    ver = bpy.app.version_string.split()[0]
+    bh = bpy.app.build_hash
+    bh = bh.decode() if isinstance(bh, bytes) else bh
+
+    if ver != BLENDER_VERSION:
+        msg = f"Blender 版本不符: {ver} != {BLENDER_VERSION}"
+        if strict:
+            raise SystemExit(f"[FATAL] {msg}\n  项目锁 {BLENDER_VERSION}，不跨 patch 混用")
+        return {"ok": False, "error": msg, "hint": "改 BLENDER_VERSION 或用正确版本"}
+
+    return {"ok": True, "version": ver, "build_hash": bh}
 
 
 def normalize_name(name: str) -> str:
@@ -11,6 +60,18 @@ def normalize_name(name: str) -> str:
     name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
     name = re.sub(r"_+", "_", name)
     return name.strip("_").lower()
+
+
+def validate_asset_name(name: str) -> dict:
+    """资产命名：<类型>_<名称>_<变体>，类型限 chr/env/prp/veh/fx"""
+    n = normalize_name(name)
+    if not _NAME_RE.match(n):
+        return {
+            "ok": False,
+            "error": f"命名不合规: {name}",
+            "hint": f"应为 <类型>_<名称>_<变体>，类型 ∈ {_ASSET_TYPES}，例 chr_hero_meditation",
+        }
+    return {"ok": True, "name": n}
 
 
 def next_version(publish_dir: str) -> str:
@@ -34,6 +95,21 @@ def check_scale(obj) -> bool:
     return all(abs(s - 1.0) < 1e-5 for s in obj.scale)
 
 
+def frame_range(duration_s: float) -> dict:
+    """
+    帧号推导：镜头从 1001 起，前后各留 8 帧 handles。
+
+    例：6 秒 → 有效帧 1009–1152，渲染帧 1001–1160
+    """
+    valid = int(round(duration_s * FPS))
+    return {
+        "shot_start": FRAME_START + HANDLE_FRAMES,
+        "shot_end": FRAME_START + HANDLE_FRAMES + valid - 1,
+        "frame_start": FRAME_START,
+        "frame_end": FRAME_START + HANDLE_FRAMES + valid - 1 + HANDLE_FRAMES,
+    }
+
+
 def metadata_template(asset: str, version: str, author: str, notes: str = "") -> dict:
     """元数据模板"""
     return {
@@ -41,5 +117,6 @@ def metadata_template(asset: str, version: str, author: str, notes: str = "") ->
         "version": version,
         "author": author,
         "notes": notes,
-        "timestamp": "",  # TODO: 写入实际时间
+        "blender_version": BLENDER_VERSION,
+        "blender_build_hash": BLENDER_BUILD_HASH,
     }

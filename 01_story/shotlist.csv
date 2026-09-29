@@ -1,6 +1,0 @@
-shot_id,seq_id,description,frame_start,frame_end,shot_start,shot_end,duration_s,camera_move,focal_length,characters,environments,props,fx,light_template,status,anim_version,cfx_version,fx_version,light_version,owner,est_days,actual_days,notes
-sh010,seq010,远景：竹林全景，云海背景，仙师打坐。音乐起。,1009,1152,1001,1160,6,缓慢推近,35mm,仙师,竹林,仙剑,光屑/尘雾,BambooForest_Dawn_Misty,pending,v01,v01,v01,v01,color_designer,3,,氛围镜头，重点在体积光和雾效
-sh020,seq020,中景：仙师睁眼，指尖凝聚法术光球。,1009,1128,1001,1136,5,微推,50mm,仙师,竹林,仙剑,法术光球,BambooForest_Orb_CyanGlow,pending,v01,v01,v01,v01,color_designer,3,,法术光球为视觉焦点，注意青蓝与环境的对比
-sh030,seq030,动作：仙师起身挥剑，剑气划破竹林。,1009,1176,1001,1184,7,快速摇移+跟随,24mm,仙师,竹林,仙剑,剑气轨迹+光屑,BambooForest_SwordBurst_Gold,pending,v01,v01,v01,v01,color_designer,5,,全片高潮，剑气金黄与竹林绿强对比
-sh040,seq040,跟随：仙师御剑而起，飞向云海。,1009,1152,1001,1160,6,跟随上升,35mm,仙师,竹林+云海,仙剑,剑气轨迹（尾迹）,BambooForest_Sky_CyanGold,pending,v01,v01,v01,v01,color_designer,4,,逆光剪影，尾迹青金渐变
-sh050,seq050,远景：仙师消失于云海，竹林重归宁静。,1009,1152,1001,1160,6,缓慢拉远,40mm,,竹林+云海,,光屑/尘雾,BambooForest_Afterglow_Soft,pending,v01,v01,v01,v01,color_designer,3,,首尾呼应，比sh010略暖
