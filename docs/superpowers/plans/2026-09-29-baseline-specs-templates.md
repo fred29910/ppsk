@@ -1,5 +1,28 @@
 # 规范与模板基线 实施计划
 
+> # ⛔ 本计划已作废，请勿执行
+>
+> **继任计划：[`2026-09-29-baseline-specs-templates-v2.md`](2026-09-29-baseline-specs-templates-v2.md)**
+>
+> 本计划基于 spec v1，而 spec v2（commit `fbdbf27`）**推翻了本计划要建的大半文件**：
+>
+> | 本计划要建 | v2 的处置 |
+> |---|---|
+> | `spec.py` 单一规格来源 | **不建**。唯一来源改用已存在的 `utils.py` |
+> | `check_spec.py` | **不建**。改名 `check_bible.py`，数据源从 `spec.py` 换成 `utils.py` |
+> | `scaffold.py` 目录生成器 | **不建**。目录树已 95% 建好，YAGNI（spec §6.3） |
+> | `render_preset.py` | **不建**。渲染预设已在 `shot.py` 里，改为抽 `apply_preset()` 共用（spec §5.2） |
+> | `build_templates.py` | 仍要建，但依赖改指向 `shot.apply_preset()` 而非 `render_preset.apply()` |
+>
+> 此外本计划基于一条**已被实测推翻的测量**：「本机无 Cycles / 无 Workbench」。
+> 实测 `scene.render.engine = "CYCLES"` 赋值成功、`hasattr(scene, "cycles")` 为真、
+> `device = "CPU"` —— **Cycles 可用（CPU only）**。`-b` 模式下 `engine` 静态枚举
+> 只注册 `BLENDER_EEVEE`，不能据此判断引擎是否存在（spec §2.1）。
+>
+> **下方内容仅作历史记录保留。**
+
+---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 建立 `spec.py` 单一规格来源、`scaffold.py` 目录生成器、两个 `.blend` 模板生成器，并落地 5 份文档的定稿与变更记录。
