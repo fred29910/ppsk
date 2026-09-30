@@ -200,7 +200,7 @@ def template_frame_range() -> tuple[int, int]:
     """模板占位帧范围：FRAME_START 起，前后各 HANDLE_FRAMES。
 
     ⚠️ 这是**模板占位值**，不是任何真实镜头的范围。生产渲染必须显式传
-    frame_start / frame_end —— setup_render 在拿不到时直接失败，
+    frame_start / frame_end —— setup_render 在拿不到时（**含半截**）直接失败，
     绝不静默渲 17 帧（静默渲错帧数比直接失败危险得多）。
     """
     return utils.FRAME_START, utils.FRAME_START + 2 * utils.HANDLE_FRAMES
@@ -225,9 +225,10 @@ def apply_preset(
     运动模糊关 + Vector 开 / 色彩四元组 / EXR multilayer /
     帧序列 #### 占位符 / 全部可用 View Layer Pass（**所有** layer）。
 
-    帧范围：frame_start / frame_end 都为 None 时用 template_frame_range()
-    占位（模板生成器走这条）；任一有值就用传入值（生产渲染走这条）。
-    只给一个也合法：另一个落到对应默认值。
+    帧范围：frame_start / frame_end **都为 None** 时用 template_frame_range()
+    占位 —— 这是模板生成器的正当用途（模板是静态文件，不存在「漏传一半」）。
+    任一为 None（半截）则直接失败：静默补成占位值就是 C-2 那个 17 帧 bug。
+    生产渲染走 setup_render，它在到达这里之前就已经强制两个都给了。
 
     ⚠️ 不设 volumetric_samples / taa_render_samples：本机无 GPU，
     采样数由渲染机决定（spec §11）。
@@ -243,6 +244,13 @@ def apply_preset(
     ver = utils.check_blender_version(strict=False)
     if not ver.get("ok"):
         return {"ok": False, "error": ver.get("error"), "hint": ver.get("hint")}
+
+    half = [n for n, v in (("frame_start", frame_start), ("frame_end", frame_end))
+            if v is None]
+    if half and len(half) < 2:
+        return {"ok": False,
+                "error": f"未指定 {'/'.join(half)}（半截帧范围）",
+                "hint": "两个一起给，或两个都不给（都不给 = 模板占位值）"}
 
     placeholder_fs, placeholder_fe = template_frame_range()
     fs = placeholder_fs if frame_start is None else frame_start
@@ -346,9 +354,13 @@ def setup_render(
     （AgX）。G0-T4 实测 AgX 会让青色自发光发白，
     关键 FX 镜头（sh020/030/040）应传 "Khronos PBR Neutral"。
 
-    frame_start / frame_end 是**必填**（两者都给或至少不给全 None）：
-    帧范围是 per-shot 数据（shotlist.csv），不是常量。拿不到就返回
-    ok:False，绝不落回模板占位 17 帧。
+    frame_start / frame_end **两个都必须给**，任一为 None 就返回 ok:False。
+    帧范围是 per-shot 数据（shotlist.csv），不是常量。
+    ⚠️ 半截参数也拒绝：只给 frame_start 而漏了 frame_end，几乎总是
+    调用方的疏忽（漏写参数、变量没赋值、参数名记错）。把它静默补成占位的
+    `FRAME_START + 2*HANDLE_FRAMES`（17 帧）会渲出一段废片且**不报错** ——
+    上一轮只拦「两个都 None」，这个窄口就是这么漏的。
+    模板占位值是模板生成器（apply_preset）的正当用途，不是生产渲染的。
     """
     if stage not in STAGES:
         return {
@@ -356,15 +368,16 @@ def setup_render(
             "error": f"未知环节: {stage}",
             "hint": f"合法值: {', '.join(STAGES)}",
         }
-    # ⚠️ 帧范围缺失直接失败。apply_preset 落到模板占位（17 帧）会让
+    # ⚠️ 任一缺失即失败，不落占位。apply_preset 落到模板占位（17 帧）会让
     #    6 秒镜只渲 17 帧且不报错 —— 这正是要消灭的静默失效。
-    if frame_start is None and frame_end is None:
+    missing = [n for n, v in (("frame_start", frame_start), ("frame_end", frame_end))
+               if v is None]
+    if missing:
         return {
             "ok": False,
-            "error": "未指定帧范围",
-            "hint": "从 00_project/pipeline/shotlist.csv 读该镜的 "
-                    "frame_start/frame_end，或显式传参 "
-                    "setup_render(..., frame_start=..., frame_end=...)",
+            "error": f"未指定 {'/'.join(missing)}",
+            "hint": "从 00_project/pipeline/shotlist.csv 读该镜的 frame_start/frame_end，"
+                    "或显式传参 / 用 CLI --frame-range START END",
         }
     if dry_run:
         return {

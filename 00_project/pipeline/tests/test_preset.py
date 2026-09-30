@@ -138,10 +138,24 @@ class TestFrameRangeIsNotFaked(unittest.TestCase):
         self.assertNotEqual(utils.FRAME_START + 2 * utils.HANDLE_FRAMES, sc.frame_end)
 
     def test_both_none_uses_placeholder(self):
-        """模板路径：两个参数都为 None 时才落到占位值"""
+        """模板路径：两个参数都为 None 时才落到占位值。
+
+        ⚠️ 这条不能被「任一为 None 就失败」的收紧改坏 ——
+        模板生成器（build_templates）正是靠占位值工作的正当路径。
+        """
         sc = fresh_scene()
         shot.apply_preset(sc, shot="tpl_layout", stage="light", project_root="/tmp/opencode")
         self.assertEqual(utils.FRAME_START + 2 * utils.HANDLE_FRAMES, sc.frame_end)
+
+    def test_both_none_placeholder_is_start_and_end(self):
+        """占位值的两端都要钉住，不只钉 end"""
+        sc = fresh_scene()
+        r = shot.apply_preset(sc, shot="tpl_layout", stage="light",
+                              project_root="/tmp/opencode")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(shot.template_frame_range(),
+                         (sc.frame_start, sc.frame_end))
+        self.assertEqual((1001, 1017), shot.template_frame_range())
 
     def test_frame_current_stays_in_range(self):
         """frame_current 不能落在 [start, end] 之外（Blender 会静默接受）"""
@@ -224,6 +238,50 @@ class TestSetupRenderInBlender(unittest.TestCase):
         r = shot.setup_render("seq010_sh010", "light", project_root="/tmp/opencode")
         self.assertFalse(r["ok"], r)
         self.assertEqual(before, (sc.frame_start, sc.frame_end, sc.render.resolution_x))
+
+    def test_half_specified_range_is_rejected(self):
+        """⚠️ C-2 残留窄口：`frame_start=1001` 而漏了 `frame_end`，
+        上一轮只拦「两个都 None」，于是 `frame_end` 被静默补成占位的 1017，
+        6 秒镜渲成 17 帧废片且不报错。半截参数必须拒绝。"""
+        sc = fresh_scene()
+        before = (sc.frame_start, sc.frame_end)
+        r = shot.setup_render("seq010_sh010", "light", frame_start=1001,
+                              project_root="/tmp/opencode")
+        self.assertFalse(r["ok"], "半截帧范围却返回 ok=True")
+        self.assertIn("frame_end", r["error"])
+        # 只报缺的那个：已经给了 frame_start 就不该说它缺
+        self.assertNotIn("frame_start", r["error"])
+        # 证明是「拒绝」而不是「静默补值」：场景一个值都没被改
+        self.assertEqual(before, (sc.frame_start, sc.frame_end),
+                         "半截参数被静默补成占位范围了")
+        self.assertNotEqual(shot.template_frame_range()[1], sc.frame_end)
+
+    def test_half_specified_range_end_only_is_rejected(self):
+        """反向：只给 frame_end 同理"""
+        sc = fresh_scene()
+        before = (sc.frame_start, sc.frame_end)
+        r = shot.setup_render("seq010_sh010", "light", frame_end=1160,
+                              project_root="/tmp/opencode")
+        self.assertFalse(r["ok"], "半截帧范围却返回 ok=True")
+        self.assertIn("frame_start", r["error"])
+        self.assertEqual(before, (sc.frame_start, sc.frame_end))
+
+    def test_half_specified_range_also_rejected_by_dry_run(self):
+        r = shot.setup_render("seq010_sh010", "light", frame_start=1001,
+                              dry_run=True, project_root="/tmp/opencode")
+        self.assertFalse(r["ok"], r)
+        self.assertIn("frame_end", r["error"])
+
+    def test_apply_preset_rejects_half_specified_range_too(self):
+        """防线在 apply_preset 也在：直接调它的人不该还能踩到同一个坑。
+        两个都 None 的模板路径不受影响（见 test_both_none_uses_placeholder）。"""
+        sc = fresh_scene()
+        before = (sc.frame_start, sc.frame_end)
+        r = shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                              project_root="/tmp/opencode", frame_start=1001)
+        self.assertFalse(r["ok"], "半截帧范围却返回 ok=True")
+        self.assertIn("frame_end", r["error"])
+        self.assertEqual(before, (sc.frame_start, sc.frame_end))
 
     def test_output_path_uses_shot_and_stage(self):
         sc = fresh_scene()

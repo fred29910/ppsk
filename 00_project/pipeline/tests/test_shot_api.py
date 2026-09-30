@@ -32,13 +32,31 @@ def _fake_render_tree(shot_id, version, stage, frame_start, frame_end):
 
 
 class TestSetupRenderFrameRange(unittest.TestCase):
-    """C-2：帧范围缺失必须失败，不是静默落占位"""
+    """C-2：帧范围缺失必须失败，不是静默落占位。
+
+    ⚠️ 判定条件是「**任一**为 None 就失败」，不是「两个都 None 才失败」。
+    半截参数几乎总是调用方的疏忽，静默补成占位值就是那个 17 帧 bug。
+    """
 
     def test_missing_frame_range_returns_ok_false(self):
         r = shot.setup_render("seq010_sh010", "light", project_root="/tmp/opencode")
         self.assertFalse(r["ok"], "未给帧范围却返回 ok=True —— 会静默渲占位帧数")
-        self.assertIn("帧范围", r["error"])
+        self.assertIn("未指定", r["error"])
+        self.assertIn("frame_start", r["error"])
+        self.assertIn("frame_end", r["error"])
         self.assertTrue(r["hint"], "失败必须带 hint")
+
+    def test_half_specified_range_returns_ok_false(self):
+        """纯 Python 层也能验：检查发生在 import bpy 之前"""
+        for kwargs in ({"frame_start": 1001}, {"frame_end": 1160}):
+            with self.subTest(**kwargs):
+                r = shot.setup_render("seq010_sh010", "light",
+                                      project_root="/tmp/opencode", **kwargs)
+                self.assertFalse(r["ok"], f"{kwargs} 却返回 ok=True")
+        r = shot.setup_render("seq010_sh010", "light", frame_start=1001,
+                              project_root="/tmp/opencode")
+        self.assertIn("frame_end", r["error"])
+        self.assertNotIn("frame_start", r["error"])
 
     def test_missing_frame_range_hint_points_at_shotlist(self):
         r = shot.setup_render("seq010_sh010", "light", project_root="/tmp/opencode")
@@ -49,7 +67,11 @@ class TestSetupRenderFrameRange(unittest.TestCase):
         r = shot.setup_render("seq010_sh010", "light", dry_run=True,
                               project_root="/tmp/opencode")
         self.assertFalse(r["ok"], r)
-        self.assertIn("帧范围", r["error"])
+        self.assertIn("未指定", r["error"])
+        r2 = shot.setup_render("seq010_sh010", "light", frame_start=1001,
+                               dry_run=True, project_root="/tmp/opencode")
+        self.assertFalse(r2["ok"], r2)
+        self.assertIn("frame_end", r2["error"])
 
     def test_dry_run_echoes_given_frame_range(self):
         r = shot.setup_render("seq010_sh010", "light", frame_start=1001, frame_end=1160,
