@@ -83,3 +83,55 @@ class TestObjectName(unittest.TestCase):
 
     def test_empty_name_returns_prefix(self):
         self.assertEqual("GEO", utils.make_object_name("GEO", "---"))
+
+
+# 规格值硬编码的收紧验收（I-2）：
+#   grep -rn '1920\|1080\|"24"\|1001\|1136' 00_project/pipeline/*.py \
+#     | grep -v '^00_project/pipeline/utils.py'
+# 必须零命中。逐任务审查用的 `^FPS\|^RESOLUTION` 只查行首模块常量，
+# 会被 `"-r", "24"` 这种参数位置与默认参数值绕过 —— review.py 的 ffmpeg
+# 帧率就是这么漏出去的，且漏出去后时码与编码帧率会静默漂移。
+class TestNoHardcodedSpecValues(unittest.TestCase):
+    """规格值只能在 utils.py 定义（spec §5.1）"""
+
+    FORBIDDEN = ("1920", "1080", '"24"', "1001", "1136", "36.0")
+
+    def _pipeline_sources(self):
+        import glob
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = []
+        for path in sorted(glob.glob(os.path.join(here, "*.py"))):
+            if os.path.basename(path) == "utils.py":
+                continue
+            with open(path, encoding="utf-8") as f:
+                out.append((os.path.basename(path), f.read().splitlines()))
+        return out
+
+    def test_no_spec_literals_outside_utils(self):
+        offenders = []
+        for fname, lines in self._pipeline_sources():
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                # 注释与文档串不算代码字面量（那里写「1001 起」是人读的说明）
+                if stripped.startswith("#"):
+                    continue
+                for bad in self.FORBIDDEN:
+                    if bad in line:
+                        offenders.append(f"{fname}:{i}: {bad} → {stripped[:70]}")
+        self.assertEqual([], offenders,
+                         "规格值硬编码漏网（应改为 utils.XXX）:\n" + "\n".join(offenders))
+
+    def test_utils_still_defines_them(self):
+        """反向：不能为了通过上一条把规格值从 utils.py 删掉"""
+        self.assertEqual(24, utils.FPS)
+        self.assertEqual((1920, 1080), utils.RESOLUTION)
+        self.assertEqual(1001, utils.FRAME_START)
+        self.assertEqual(36.0, utils.SENSOR_WIDTH)
+
+
+if __name__ == "__main__":
+    # ⚠️ 不能用 unittest.main()：Blender 传进来的是它自己的 argv，
+    #    失败用例不会让命令失败。本分支的整个动机就是消灭「静默通过」。
+    _suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    _result = unittest.TextTestRunner(verbosity=2).run(_suite)
+    sys.exit(0 if _result.wasSuccessful() else 1)

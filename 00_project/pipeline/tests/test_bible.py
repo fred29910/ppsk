@@ -58,7 +58,9 @@ class TestBibleMatchesUtils(unittest.TestCase):
             self.assertIn(v, t)
 
     def test_sensor_width(self):
-        self.assertIn(str(int(utils.SENSOR_WIDTH)), bible_text())
+        """⚠️ 断言必须带单位。只写 `assertIn("36")` 的话，把它改成 12 反而
+        仍会通过 —— "12" 是 "1920" 的子串，元测试立刻暴露了这一点。"""
+        self.assertIn(f"{int(utils.SENSOR_WIDTH)} mm", bible_text())
 
     def test_frame_convention(self):
         t = bible_text()
@@ -71,15 +73,91 @@ class TestBibleMatchesUtils(unittest.TestCase):
 
 
 class TestTamperIsDetected(unittest.TestCase):
-    """元测试：改坏 utils.py 的值后主断言必须变红，否则这些断言是装饰品"""
+    """元测试：改坏 utils.py 的值后**真实测试**必须变红，否则这些断言是装饰品
 
-    def test_fps_change_would_break_fps_assertion(self):
+    spec §10.3 的要求是「改坏一个值 → 测试变红」。
+    之前的版本把断言表达式在原地重抄一遍（`assertIn(str(utils.FPS), bible_text())`），
+    并不调用 TestBibleMatchesUtils.test_fps —— 把整个 test_fps 删掉它照样全绿。
+    所以这里必须用反射跑真实用例。
+    """
+
+    def _run_real(self, case_name, method_name):
+        case = TestBibleMatchesUtils(case_name)
+        if hasattr(case, "setUp"):
+            case.setUp()
+        return getattr(case, method_name)()
+
+    def test_fps_test_is_green_before_tampering(self):
+        """反向：没改坏时真实用例必须是绿的，否则下面那条「变红」没有意义"""
+        self._run_real("test_fps", "test_fps")
+
+    def test_fps_change_breaks_the_real_fps_test(self):
         original = utils.FPS
         try:
             utils.FPS = 48
-            # 主断言用的是 assertIn(str(utils.FPS), bible_text())，
-            # 所以这里必须真的去跑它并断言它抛 AssertionError
             with self.assertRaises(AssertionError):
-                self.assertIn(str(utils.FPS), bible_text())
+                self._run_real("test_fps", "test_fps")
         finally:
             utils.FPS = original
+
+    def test_resolution_change_breaks_the_real_resolution_test(self):
+        original = utils.RESOLUTION
+        try:
+            utils.RESOLUTION = (1280, 720)
+            with self.assertRaises(AssertionError):
+                self._run_real("test_resolution", "test_resolution")
+        finally:
+            utils.RESOLUTION = original
+
+    def test_shutter_change_breaks_the_real_shutter_test(self):
+        original = utils.SHUTTER_ANGLE
+        try:
+            utils.SHUTTER_ANGLE = 360.0
+            with self.assertRaises(AssertionError):
+                self._run_real(
+                    "test_shutter_angle_in_degrees", "test_shutter_angle_in_degrees")
+        finally:
+            utils.SHUTTER_ANGLE = original
+
+    def test_version_change_breaks_the_real_version_test(self):
+        original = utils.BLENDER_VERSION
+        try:
+            utils.BLENDER_VERSION = "9.9.9"
+            with self.assertRaises(AssertionError):
+                self._run_real(
+                    "test_blender_version_and_hash", "test_blender_version_and_hash")
+        finally:
+            utils.BLENDER_VERSION = original
+
+    def test_sensor_width_change_breaks_the_real_sensor_test(self):
+        original = utils.SENSOR_WIDTH
+        try:
+            utils.SENSOR_WIDTH = 12.0
+            with self.assertRaises(AssertionError):
+                self._run_real("test_sensor_width", "test_sensor_width")
+        finally:
+            utils.SENSOR_WIDTH = original
+
+    def test_view_transform_change_breaks_the_real_color_test(self):
+        original = utils.VIEW_TRANSFORM
+        try:
+            utils.VIEW_TRANSFORM = "Totally Not A View"
+            with self.assertRaises(AssertionError):
+                self._run_real("test_color_quadruple", "test_color_quadruple")
+        finally:
+            utils.VIEW_TRANSFORM = original
+
+    def test_frame_start_change_breaks_the_real_frame_test(self):
+        original = utils.FRAME_START
+        try:
+            utils.FRAME_START = 2001
+            with self.assertRaises(AssertionError):
+                self._run_real("test_frame_convention", "test_frame_convention")
+        finally:
+            utils.FRAME_START = original
+
+
+if __name__ == "__main__":
+    _suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    _result = unittest.TextTestRunner(verbosity=2).run(_suite)
+    sys.exit(0 if _result.wasSuccessful() else 1)

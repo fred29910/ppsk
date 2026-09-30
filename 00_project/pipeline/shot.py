@@ -292,7 +292,7 @@ def create_shot(
 
     frame_start / frame_end 是 per-shot 数据（shotlist.csv），**只回显到返回值**，
     不写 scene 的帧范围 —— 帧范围由 setup_render / apply_preset 按传参设置。
-    留空就回显 None，不猜：猜出来的 17 帧 / 1136 帧没人能分辨真假。
+    留空就回显 None，不猜：猜出来的占位范围没人能分辨真假。
     """
     shot_name = f"seq{int(seq):03d}_sh{int(shot):03d}"
     base = os.path.join(project_root, "06_shots", shot_name)

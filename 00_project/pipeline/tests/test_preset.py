@@ -197,6 +197,43 @@ class TestVersionGateIsWired(unittest.TestCase):
                         f"warnings 未带上 hash 不符: {r.get('warnings')}")
 
 
+class TestSetupRenderInBlender(unittest.TestCase):
+    """I-8：setup_render 真正改 scene 的那条路（test_shot_api.py 覆盖不到）"""
+
+    def test_view_transform_is_applied_to_scene(self):
+        sc = fresh_scene()
+        r = shot.setup_render("seq010_sh020", "light",
+                              view_transform="Khronos PBR Neutral",
+                              frame_start=1001, frame_end=1136,
+                              project_root="/tmp/opencode")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual("Khronos PBR Neutral", sc.view_settings.view_transform)
+
+    def test_frame_range_reaches_scene_through_setup_render(self):
+        """C-2 端到端：1170 不是占位的 1017"""
+        sc = fresh_scene()
+        r = shot.setup_render("seq010_sh010", "light", frame_start=1001,
+                              frame_end=1160, project_root="/tmp/opencode")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(1001, sc.frame_start)
+        self.assertEqual(1160, sc.frame_end)
+
+    def test_missing_frame_range_leaves_scene_untouched(self):
+        sc = fresh_scene()
+        before = (sc.frame_start, sc.frame_end, sc.render.resolution_x)
+        r = shot.setup_render("seq010_sh010", "light", project_root="/tmp/opencode")
+        self.assertFalse(r["ok"], r)
+        self.assertEqual(before, (sc.frame_start, sc.frame_end, sc.render.resolution_x))
+
+    def test_output_path_uses_shot_and_stage(self):
+        sc = fresh_scene()
+        shot.setup_render("seq010_sh010", "light", frame_start=1001, frame_end=1160,
+                          project_root="/tmp/opencode")
+        self.assertIn(os.path.join("seq010_sh010", "render", "light", "v001"),
+                      sc.render.filepath)
+        self.assertIn("####", sc.render.filepath)
+
+
 if __name__ == "__main__":
     _suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
     _result = unittest.TextTestRunner(verbosity=2).run(_suite)
