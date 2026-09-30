@@ -161,9 +161,9 @@ gantt
 | 类别 | 规则 | 示例 |
 |---|---|---|
 | 资产 | `<类型>_<名称>_<变体>` | `chr_hero_default` / `prp_car01_damaged` |
-| 镜头 | `seq<三位>_sh<三位>` | `seq040_sh020` |
-| 文件 | `<镜头或资产>_<环节>_v<三位>.blend` | `seq040_sh020_anim_v012.blend` |
-| 渲染帧 | `<镜头>_<环节>_v<三位>.<四位帧号>.exr` | `seq040_sh020_light_v003.1001.exr` |
+| 镜头 | `seq<三位>_sh<三位>` | `seq010_sh020` |
+| 文件 | `<镜头或资产>_<环节>_v<三位>.blend` | `seq010_sh020_anim_v012.blend` |
+| 渲染帧 | `<镜头>_<环节>_v<三位>.<四位帧号>.exr` | `seq010_sh020_light_v003.1001.exr` |
 | 对象 | 用前缀区分用途 | `GEO_` / `RIG_` / `CTRL_` / `DEF_` / `MCH_` / `CAM_` / `LGT_` |
 
 资产类型前缀：`chr` 角色、`env` 环境、`prp` 道具、`veh` 载具、`fx` 特效。
@@ -196,10 +196,11 @@ MyMovie/
 │   ├── env/
 │   ├── prp/
 │   ├── veh/
+│   ├── fx/              # 可发布 FX 预设（与 chr/env/prp/veh/lib 平级）
 │   └── lib/             # 共享材质、HDRI、节点组、GN 生成器
 ├── 06_shots/
-│   └── seq040/
-│       └── sh020/
+│   └── seq010/
+│       └── sh010/
 │           ├── layout/  anim/  cfx/  fx/  light/  comp/
 │           ├── cache/   # abc / usd / vdb / 点缓存
 │           └── render/  # 按 环节/版本 分目录的 EXR 序列
@@ -219,7 +220,7 @@ flowchart LR
     ENV["env_cityStreetA.blend"]
   end
 
-  subgraph SHOT["镜头 seq040_sh020"]
+  subgraph SHOT["镜头 seq010_sh020"]
     L["layout.blend<br/>摄影机与布局"]
     AN["anim.blend<br/>角色动画"]
     CFX["cfx.blend<br/>布料 / 毛发"]
@@ -301,7 +302,7 @@ flowchart LR
 
 - **临时对白（Scratch）**：Animatic 阶段自己录或用 TTS，用来定节奏。
 - **正式对白**：**必须在正式动画开始前完成**，因为口型和表演都以它为准。
-- 对白按镜头切分并命名（`seq040_sh020_hero_line03.wav`），放到 `04_audio/dialogue/`。
+- 对白按镜头切分并命名（`seq010_sh020_hero_line03.wav`），放到 `04_audio/dialogue/`。
 
 ### 4.3 Storyboard
 
@@ -327,7 +328,7 @@ flowchart LR
 
 | 镜头 | 剪辑时码 | 有效帧 | 角色 | 场景 | 道具 | FX | 灯光方案 |
 |---|---|---|---|---|---|---|---|
-| seq040_sh020 | 00:12–00:17 | 1009–1128 | Hero, Enemy | env_cityStreetA | Car01, StreetLamp | Smoke, Dust | Night_Rain |
+| seq010_sh020 | 00:12–00:17 | 1009–1128 | Hero, Enemy | env_cityStreetA | Car01, StreetLamp | Smoke, Dust | Night_Rain |
 
 ### 4.5 美术设定
 
@@ -657,7 +658,7 @@ Layout 在 Animatic 之后立刻开始，**使用代理或粗模**，与资产�
 
 关于 **USD**：Blender 支持 USD 的导入和导出，但层级合成（Layering / Composition）能力远弱于 Houdini Solaris 等工具。纯 Blender 管线以 **Link + Alembic** 为主；跨软件协作（例如 FX 交给 Houdini）时用 USD 或 Alembic 交换。
 
-缓存路径规范：`06_shots/seq040/sh020/cache/<环节>/v###/`，版本号和生成它的源文件版本保持对应。
+缓存路径规范：`06_shots/seq010/sh020/cache/<环节>/v###/`，版本号和生成它的源文件版本保持对应。
 
 ### 6.4 布料（CFX）
 
@@ -689,7 +690,7 @@ flowchart LR
 | 雨、雪、灰尘、碎屑、魔法 | **Geometry Nodes（含 Simulation Zone）** / 粒子系统 | 首选 GN，可控性和性能更好 |
 | 体积雾 | 体积材质 / VDB | |
 
-FX 按类型做成可复用的预设或节点组，放进 `05_assets/lib/fx/`；镜头里只调参数并缓存。
+FX 按类型做成可复用的预设或节点组。**可发布的 FX 预设放 `05_assets/fx/`**；节点组与 GN 生成器放 `05_assets/lib/`。镜头里只调参数并缓存。
 
 ### 6.7 群集（Crowd）
 
@@ -788,7 +789,7 @@ flowchart LR
 | 位深 | 颜色类 Pass 用 **16-bit Half Float**；Depth / Position / Vector / Cryptomatte 等数据 Pass 需要 32-bit，可以单独输出一个 32-bit 文件 |
 | 压缩 | DWAA（体积小，有轻微损失，适合颜色 Pass）/ ZIP（无损，适合数据 Pass） |
 | 色彩 | 场景线性，不烘入显示变换 |
-| 命名 | `render/light/v003/seq040_sh020_light_v003.1001.exr` |
+| 命名 | `render/light/v003/seq010_sh020_light_v003.1001.exr` |
 
 **不要**直接输出 MP4 或 PNG 作为最终素材。MP4 只用于审阅（见 10.1）。
 
@@ -1055,7 +1056,7 @@ sequenceDiagram
   participant B as Blender
   participant A as 艺术家
   participant F as 渲染农场
-  DB->>P: 新增镜头 seq040_sh020
+  DB->>P: 新增镜头 seq010_sh020
   P->>B: create_shot 生成各环节 .blend
   P->>B: load_asset 链接角色和场景
   P->>B: setup_camera 与 setup_render
@@ -1086,12 +1087,12 @@ flowchart TD
 
 适合交给 Agent 的任务：
 
-- "按镜头表创建 seq040 的全部镜头文件。"
-- "把 Hero 放到 seq040_sh020 的街道中央，并加载已发布的最新版本。"
+- "按镜头表创建 seq010 的全部镜头文件。"
+- "把 Hero 放到 seq010_sh020 的街道中央，并加载已发布的最新版本。"
 - "用城市生成器生成一条 500 米街道，放置 20 栋建筑。"
 - "给这场戏套用 Night_Rain 灯光模板。"
-- "检查 seq040 所有镜头的贴图缺失和帧范围，并生成报告。"
-- "提交 seq040_sh020 灯光 v003 的渲染，帧范围 1001–1136。"
+- "检查 seq010 所有镜头的贴图缺失和帧范围，并生成报告。"
+- "提交 seq010_sh020 灯光 v003 的渲染，帧范围 1001–1136。"
 
 风险与约束：
 

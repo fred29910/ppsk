@@ -22,9 +22,15 @@ import time
 
 import bpy
 
+import argparse
+
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-OUT = argv[0] if argv else "/tmp/g0_t1"
-RES = (int(argv[1]), int(argv[2])) if len(argv) >= 3 else (320, 180)
+_p = argparse.ArgumentParser(prog="g0_probe_t1.py")
+_p.add_argument("--out", default="/tmp/g0_t1", help="输出目录")
+_p.add_argument("--res", nargs=2, type=int, default=(320, 180), metavar=("W", "H"))
+_a = _p.parse_args(argv)
+OUT = _a.out
+RES = tuple(_a.res)
 
 
 def build(use_volume: bool):
