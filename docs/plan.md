@@ -555,7 +555,7 @@ flowchart LR
 
 ### 12.1 管线 API 现状
 
-**仓库已有实现**（`00_project/pipeline/`，共 5 个模块 201 行）：
+**仓库已有实现**（`00_project/pipeline/`，共 5 个模块 1007 行）：
 
 | 模块 | 已有函数 |
 |---|---|
@@ -936,7 +936,7 @@ Demo 的目的是"验证管线与风格"（第 3 行自己写的），所以成�
 
 - [x] 目录结构（`dls.md` §3.1）
 - [x] Project Bible 初稿（`00_project/bible/project_bible.md`）— **需按 §7.1/§7.2 反向更新**
-- [ ] 管线 API 骨架 5 模块 201 行（`asset.py` / `shot.py` / `cache.py` / `review.py` / `utils.py`）— ⚠️ `asset.py` 与 `cache.py` 至今全是 `# TODO` 空壳，仅 `utils.py` / `shot.py` / `review.py` 有实际实现
+- [ ] 管线 API 骨架 5 模块 1007 行（`asset.py` / `shot.py` / `cache.py` / `review.py` / `utils.py`）— ⚠️ `asset.py` 与 `cache.py` 至今全是 `# TODO` 空壳，仅 `utils.py` / `shot.py` / `review.py` 有实际实现
 - [x] 模板文档 4 份（`layout_template.md` / `render_template.md` / `rig_base.md` / `lookdev_scene.md`）
 - [ ] 镜头目录骨架（`seq040/sh020/`）— ⚠️ 存在但与镜头表 `SEQ010` 冲突，需重新编号或删除
 
@@ -955,7 +955,7 @@ Demo 的目的是"验证管线与风格"（第 3 行自己写的），所以成�
 - [x] **同步 `README.md` 落地清单**与本文件一致
 - [ ] 目录模板生成脚本（一键生成 §3 结构）— 目录已按 dls.md §3.1 建齐；本 Demo 规模下不需要生成器
 - [x] 模板 .blend：Layout / Anim / CFX / FX / Light 各一，预置单位、帧率、色彩管理、Collection
-- [x] LookDev 场景：统一 HDRI、灰球、**色卡**、转台相机
+- [x] LookDev 场景：统一 HDRI、灰球、**色卡**、转台相机 — 灰球 / 色卡 / 转台相机已就位；**HDRI 未安装**（`05_assets/lib/hdri/` 不存在），模板只留 World 槽位不伪造纯色环境。HDRI 属 plan §22.4 / §16 授权登记，待补
 - [x] 渲染设置预设：EEVEE View Layer、Pass、EXR 规格（§7.3）
 
 ### 22.4 资产

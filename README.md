@@ -35,8 +35,8 @@
 **已有**
 
 - [x] 目录结构
-- [x] Project Bible 初稿（待按 plan §7 更新）
-- [x] 管线 API 骨架（`asset` / `shot` / `cache` / `review` / `utils`）
+- [x] Project Bible 定稿（分辨率 / 帧率 / 色彩管理四元组 / 快门 / 性能预算，见 plan §7、§11）
+- [ ] 管线 API 骨架（`asset` / `shot` / `cache` / `review` / `utils`）— ⚠️ `asset.py` 与 `cache.py` 至今全是 `# TODO` 空壳，仅 `utils.py` / `shot.py` / `review.py` 有实际实现
 - [x] 模板文档（layout / render / rig_base / lookdev_scene）
 
 **W0 必做**
@@ -48,7 +48,7 @@
 **待办**
 
 - [x] 模板 .blend（6 个：Layout / Anim / CFX / FX / Light / LookDev）
-- [x] LookDev 场景
+- [x] LookDev 场景 — 灰球 / 色卡 / 转台相机已就位；**HDRI 未安装**（`05_assets/lib/hdri/` 不存在），模板只留 World 槽位不伪造纯色环境。HDRI 属 plan §22.4 / §16 授权登记，待补
 - [ ] 角色绑定基础（表情 shape keys，无口型集）
 - [ ] 仙侠 FX 资产库（P0 三种）
 - [ ] 灯光模板（`Cloud_Day` / `Night_Moon` / `Hall_Mystic`）
