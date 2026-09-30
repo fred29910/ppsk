@@ -78,6 +78,25 @@ AgX 全部档位发白 2–6/7，Khronos PBR Neutral 同强度只发白 1–3/7�
 | EXR 不含显示变换 | 评 View Transform 必须在**渲染时**套上再读 PNG；读 EXR 拿不到。且 bpy 的 `image.pixels` 也不套用 |
 | 本机 ffmpeg 无 `drawtext` | 静态构建无 libfreetype。烧录走 Blender VSE（§6.1 要求） |
 | Workbench 在 `-b` 下全黑 | 无 GL 上下文，不可用于自动化检查 |
+| **Blender `--python` 崩溃时退出码仍为 0** | 未捕获异常不会让命令失败，只有显式 `sys.exit(N)` 才传播。所有 Blender 入口脚本须在 `__main__` 内 try/except 后显式 `sys.exit(1)`；**验收一律看输出文本，不看退出码** |
+| **EEVEE empty 类型无 `WIRE`** | `empty_display_type` 枚举为 `PLAIN_AXES`/`ARROWS`/`SINGLE_ARROW`/`CIRCLE`/`CUBE`/`SPHERE`/`CONE`/`IMAGE`，参考线对象用 `PLAIN_AXES` |
+
+## 性能与场景规模预算（plan §11，锁定）
+
+| 指标 | 上限 | 超限处理 |
+|---|---|---|
+| 单镜头角色数 | 2（本 Demo 1） | — |
+| 同屏 FX 预设实例 | 5（本 Demo 3） | 拆分镜头或合批 |
+| 单镜头总三角面 | **150 万** | GN 实例化 / LOD / 视锥剔除 |
+| 材质数 / 材质槽 | 60 | 合并同类材质 |
+| 灯光数 | 20 | Light Linking 复用 |
+| Light probe sphere | 128（EEVEE 硬上限） | 提高 probe 覆盖效率 |
+| Light probe plane（视锥内） | 16（EEVEE 硬上限） | 改用 sphere |
+| VDB 体素分辨率 | 128³ | 降分辨率 + 后期补偿 |
+| GN 实例数（竹林） | 10,000 | 提高几何复用率 |
+| 显存 VRAM | ≤ 20 GB | 拆镜头 / 降体积分辨率 |
+| 单镜头 Alembic 缓存 | ≤ 2 GB | 降拓扑 / 只导可见区块 |
+| View Layer 数 | ≤ 4 | 重渲成本线性增长 |
 
 ## 云雾双轨方案（沿用 plan.md §2.2）
 

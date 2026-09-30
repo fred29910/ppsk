@@ -6,11 +6,12 @@
 
 ## 快速开始
 
-1. 用 Blender **5.2.1 LTS** 打开 `00_project/templates/` 下的模板文件。
+1. 用 Blender **5.2.0 LTS** 打开 `00_project/templates/` 下的模板文件。
 2. 核对 `00_project/bible/project_bible.md`（首次开工前必须按 `docs/plan.md` §7 反向更新）。
 3. **先跑 G0 技术可行性验证**（`docs/plan.md` §5.0），不通过不要进入资产制作。
 4. 用管线脚本创建第一个镜头（见 `00_project/pipeline/`）。
 5. 提交渲染前检查贴图路径、帧范围、输出路径（`docs/plan.md` §11 性能预算 / §7.4 EEVEE 约束）。
+6. 规格以 `00_project/pipeline/utils.py` 为唯一机器可读来源。改规格的顺序是：先改 `utils.py` → 再改本文件 → 跑 `cd 00_project/pipeline && python3 -m unittest discover -s tests -t .`
 
 ## 目录说明
 
@@ -40,14 +41,14 @@
 
 **W0 必做**
 
-- [ ] G0 技术可行性验证（plan §5.0）
-- [ ] 锁定 Blender 5.2.1 LTS + 记录 build hash
+- [x] G0 技术可行性验证（plan §5.0）
+- [x] 锁定 Blender **5.2.0 LTS** + build hash `fbe6228777e7`
 - [ ] 色彩全链路验证（plan §9.1）
 
 **待办**
 
-- [ ] 模板 .blend
-- [ ] LookDev 场景
+- [x] 模板 .blend（6 个：Layout / Anim / CFX / FX / Light / LookDev）
+- [x] LookDev 场景
 - [ ] 角色绑定基础（表情 shape keys，无口型集）
 - [ ] 仙侠 FX 资产库（P0 三种）
 - [ ] 灯光模板（`Cloud_Day` / `Night_Moon` / `Hall_Mystic`）
@@ -56,7 +57,7 @@
 - [ ] 镜头表 / 资产表 + Schema（plan §13）
 - [ ] 管线 API 补齐（`audit_shot` / `upgrade_asset` / `get_dependencies` / `collect_render`）
 - [ ] 缓存失效矩阵与 seed 固定（plan §10.4）
-- [ ] 渲染设置预设（EEVEE View Layer / Pass / EXR）
+- [x] 渲染设置预设（EEVEE View Layer / Pass / EXR）
 - [ ] 授权登记表 `licensing.csv`（plan §16）
 - [ ] 渲染农场（Flamenco 4 节点）
 - [ ] 版本控制与备份（3-2-1）
