@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import unittest
 
@@ -17,6 +16,14 @@ def bible_text() -> str:
         return f.read()
 
 
+def bible_body() -> str:
+    """只取「## 修订记录」之前的正文。
+
+    修订记录里合法地提到历史版本号（如 5.2.1），拿全文做版本断言会被它喂饱。
+    """
+    return bible_text().split("## 修订记录")[0]
+
+
 class TestBibleMatchesUtils(unittest.TestCase):
     """spec §9.1：Bible 人工维护，但数值必须与 utils.py 一致。
 
@@ -24,7 +31,7 @@ class TestBibleMatchesUtils(unittest.TestCase):
     """
 
     def test_blender_version_and_hash(self):
-        t = bible_text()
+        t = bible_body()
         self.assertIn(utils.BLENDER_VERSION, t)
         self.assertIn(utils.BLENDER_BUILD_HASH, t)
 
@@ -60,17 +67,19 @@ class TestBibleMatchesUtils(unittest.TestCase):
 
     def test_no_stale_blender_version(self):
         """5.2.1 只允许出现在「改为实测的 5.2.0」这类修订记录语境里"""
-        body = bible_text().split("## 修订记录")[0]
-        self.assertNotIn("5.2.1", body, "正文里还有 5.2.1 —— 修订记录里的历史引用不算")
+        self.assertNotIn("5.2.1", bible_body(), "正文里还有 5.2.1 —— 修订记录里的历史引用不算")
 
 
 class TestTamperIsDetected(unittest.TestCase):
-    """元测试：改坏 utils.py 的值后测试必须变红，否则这个测试是装饰品"""
+    """元测试：改坏 utils.py 的值后主断言必须变红，否则这些断言是装饰品"""
 
-    def test_fps_change_would_break_bible_assertion(self):
+    def test_fps_change_would_break_fps_assertion(self):
         original = utils.FPS
         try:
             utils.FPS = 48
-            self.assertNotIn(str(utils.FPS), bible_text().split("fps")[-1][:20] or "x")
+            # 主断言用的是 assertIn(str(utils.FPS), bible_text())，
+            # 所以这里必须真的去跑它并断言它抛 AssertionError
+            with self.assertRaises(AssertionError):
+                self.assertIn(str(utils.FPS), bible_text())
         finally:
             utils.FPS = original
