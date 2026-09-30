@@ -583,7 +583,7 @@ flowchart LR
 - 所有函数接受 `--project-root`，不使用硬编码路径；
 - 启动即校验 Blender 版本 == `5.2.0`，不匹配直接退出 —— `pipeline/utils.py` 的 `check_blender_version()`；
   **接入点是 `shot.apply_preset()` 开头**（`pipeline/shot.py`），不符时直接返回 `{"ok": False}` 且不改场景任何设置。
-  三个入口脚本都经 `apply_preset` 或直接调它，所以一处接入即覆盖。
+  覆盖范围：入口脚本 `shot.py` 与 `build_templates.py` 都经 `apply_preset`，已纳入闸门；`review.py` 不经 `apply_preset`（只 `import utils`，`main → create_preview → exr_extract_layer / burn_in_frame / ffmpeg`），**尚未纳入版本闸门**，`review.py --create_preview` 在非 5.2 的 Blender 上不会被拦下 —— 待后续补。
   build hash 不符**只警告**（本机是 dev build，官方发行版 hash 必然不同，硬失败等于永久挡住）。
 
 ### 12.2 适合本项目的 AI Agent 任务
