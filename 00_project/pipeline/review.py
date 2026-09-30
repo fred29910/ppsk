@@ -233,8 +233,8 @@ def create_preview(
     shot: str,
     version: str,
     stage: str = "light",
-    frame_start: int = 1001,
-    frame_end: int = 1136,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
     project_root: str = ".",
     dry_run: bool = False,
 ) -> dict:
@@ -245,7 +245,19 @@ def create_preview(
       1. exr_extract_layer: multilayer EXR → 单层 EXR（ffmpeg 读不了 multilayer）
       2. burn_in_frame: Blender VSE Text strip 烧录信息（本机 ffmpeg 无 drawtext）
       3. ffmpeg: 序列帧 → H.264 mp4
+
+    ⚠️ 帧范围必须显式传（shotlist.csv 的 frame_start/frame_end）。
+    缺了就直接失败：审阅片的帧范围与渲染帧范围不一致时，
+    缺帧 / 重复帧都不会报错，只会给你一段看着「能放」但对不上的片子。
     """
+    if frame_start is None or frame_end is None:
+        return {
+            "ok": False,
+            "error": "未指定帧范围",
+            "hint": "从 00_project/pipeline/shotlist.csv 读该镜的 "
+                    "frame_start/frame_end，或显式传参 "
+                    "create_preview(..., frame_start=..., frame_end=...)",
+        }
     render_dir = os.path.join(project_root, "06_shots", shot, "render", stage, version)
     review_dir = os.path.join(project_root, "07_review", shot)
     out_path = os.path.join(review_dir, f"{shot}_{stage}_{version}_burn.mp4")
@@ -273,7 +285,10 @@ def create_preview(
         "-crf", "18",
         "-preset", "slow",
         "-pix_fmt", "yuv420p",
-        "-r", "24",
+        # ⚠️ 必须跟 _timecode 用同一个 FPS 来源（utils.FPS）。
+        #    这里写死 24 而 _timecode 读 utils.FPS 的话，一旦把 FPS 改成 25，
+        #    烧进画面的时码按 25 算、ffmpeg 按 24 编码，画面时码持续漂移且不报错。
+        "-r", str(utils.FPS),
         out_path,
     ]
 
@@ -380,19 +395,25 @@ def main():
     _a = p.parse_args(_argv())
 
     if _a.create_preview:
-        fs, fe = _a.frame_range if _a.frame_range else (1001, 1136)
-        print(
-            create_preview(
-                *_a.create_preview,
-                frame_start=fs,
-                frame_end=fe,
-                project_root=_a.project_root,
-                dry_run=_a.dry_run,
-            )
+        # 不猜默认帧范围：CLI 没给 --frame-range 就让 create_preview 报缺参数，
+        # 而不是静默按占位范围去数帧。
+        fs, fe = _a.frame_range if _a.frame_range else (None, None)
+        r = create_preview(
+            *_a.create_preview,
+            frame_start=fs,
+            frame_end=fe,
+            project_root=_a.project_root,
+            dry_run=_a.dry_run,
         )
     else:
         p.print_help()
+        return 0
+
+    print(r)
+    # ⚠️ Blender 抛未捕获异常时退出码仍是 0，只有显式 sys.exit(N) 才传播。
+    #    create_preview 缺帧 / ffmpeg 失败都必须让退出码非 0。
+    return 0 if r.get("ok") else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

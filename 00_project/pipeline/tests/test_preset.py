@@ -18,11 +18,30 @@ def fresh_scene():
 
 class TestVersionCheck(unittest.TestCase):
     def test_hash_mismatch_is_warning_not_failure(self):
-        """本机 dev build 与官方发行版 hash 必然不同 —— 只能警告"""
-        r = utils.check_blender_version.__wrapped__() if hasattr(utils.check_blender_version, "__wrapped__") \
-            else utils.check_blender_version(strict=False)
+        """本机 dev build 与官方发行版 hash 必然不同 —— 只能警告。
+
+        ⚠️ monkeypatch 记录常量来制造不符，而不是依赖本机 hash 恰好不同：
+        后者在 hash 相同的机器上恒真，这条规则就一次都没被执行过。
+        """
+        from unittest import mock
+        with mock.patch.object(utils, "BLENDER_BUILD_HASH", "ffffffffffff"):
+            r = utils.check_blender_version(strict=False)
         self.assertTrue(r["ok"], r)
-        self.assertIsInstance(r.get("warnings", []), list)
+        self.assertTrue(any("build hash" in w for w in r.get("warnings", [])),
+                        f"hash 不符未进 warnings: {r.get('warnings')}")
+
+    def test_version_prefix_mismatch_fails(self):
+        from unittest import mock
+        with mock.patch.object(utils, "REQUIRED_VERSION_PREFIX", "9.9"):
+            r = utils.check_blender_version(strict=False)
+        self.assertFalse(r["ok"], "版本前缀不符却返回 ok=True")
+
+    def test_strict_mismatch_raises_system_exit(self):
+        """spec §10.4：版本号前两段 ≠ 5.2 → 退出码非 0"""
+        from unittest import mock
+        with mock.patch.object(utils, "REQUIRED_VERSION_PREFIX", "9.9"):
+            with self.assertRaises(SystemExit):
+                utils.check_blender_version(strict=True)
 
 
 class TestApplyPreset(unittest.TestCase):
@@ -64,11 +83,12 @@ class TestApplyPreset(unittest.TestCase):
                           view_transform="Khronos PBR Neutral", project_root="/tmp/opencode")
         self.assertEqual("Khronos PBR Neutral", sc.view_settings.view_transform)
 
-    def test_exr_multilayer_and_frame_range(self):
+    def test_exr_multilayer_and_template_frame_range(self):
         ims = self.scene.render.image_settings
         self.assertEqual("MULTI_LAYER_IMAGE", ims.media_type)
         self.assertEqual("OPEN_EXR_MULTILAYER", ims.file_format)
-        # 帧范围：1001 起 + 8 帧 handles
+        # ⚠️ 只在 frame_start/frame_end 都为 None 时才是占位范围。
+        #    这个 17 帧值是**模板占位**，不是任何真实镜头的范围。
         self.assertEqual(utils.FRAME_START, self.scene.frame_start)
         self.assertEqual(utils.FRAME_START + 2 * utils.HANDLE_FRAMES, self.scene.frame_end)
         self.assertEqual(utils.FRAME_START + utils.HANDLE_FRAMES, self.scene.frame_current)
@@ -80,6 +100,101 @@ class TestApplyPreset(unittest.TestCase):
 
     def test_engine_is_eevee_by_default(self):
         self.assertEqual("BLENDER_EEVEE", self.scene.render.engine)
+
+    def test_passes_apply_to_every_view_layer(self):
+        """⚠️ C-1：只设 view_layers[0] 会让 VL_char 只剩 combined，
+        z / vector / mist / diffuse_color 全缺 —— 渲出来是残缺数据集。"""
+        sc = fresh_scene()
+        sc.view_layers.new("VL_char")
+        r = shot.setup_passes(sc)
+        self.assertTrue(r["ok"], r)
+        for vl in sc.view_layers:
+            self.assertTrue(vl.use_pass_z, f"{vl.name} 缺 z")
+            self.assertTrue(vl.use_pass_vector, f"{vl.name} 缺 vector")
+            self.assertTrue(vl.use_pass_mist, f"{vl.name} 缺 mist")
+            self.assertTrue(vl.use_pass_diffuse_color, f"{vl.name} 缺 diffuse_color")
+            self.assertTrue(vl.use_pass_combined, f"{vl.name} 缺 combined")
+        self.assertEqual(len(sc.view_layers), len(r["per_layer"]))
+
+
+class TestFrameRangeIsNotFaked(unittest.TestCase):
+    """C-2：帧范围是 per-shot 数据（shotlist.csv），不是模板占位常量。"""
+
+    def test_explicit_frame_end_wins(self):
+        sc = fresh_scene()
+        r = shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                              project_root="/tmp/opencode",
+                              frame_start=1001, frame_end=1160)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(1001, sc.frame_start)
+        self.assertEqual(1160, sc.frame_end)
+
+    def test_explicit_frame_end_different_from_placeholder(self):
+        """反向：占位值是 1017，若这条不成立说明传参根本没生效"""
+        sc = fresh_scene()
+        shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                          project_root="/tmp/opencode",
+                          frame_start=1001, frame_end=1160)
+        self.assertNotEqual(utils.FRAME_START + 2 * utils.HANDLE_FRAMES, sc.frame_end)
+
+    def test_both_none_uses_placeholder(self):
+        """模板路径：两个参数都为 None 时才落到占位值"""
+        sc = fresh_scene()
+        shot.apply_preset(sc, shot="tpl_layout", stage="light", project_root="/tmp/opencode")
+        self.assertEqual(utils.FRAME_START + 2 * utils.HANDLE_FRAMES, sc.frame_end)
+
+    def test_frame_current_stays_in_range(self):
+        """frame_current 不能落在 [start, end] 之外（Blender 会静默接受）"""
+        sc = fresh_scene()
+        shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                          project_root="/tmp/opencode",
+                          frame_start=1001, frame_end=1010)
+        self.assertTrue(sc.frame_start <= sc.frame_current <= sc.frame_end,
+                        f"{sc.frame_current} 不在 [{sc.frame_start}, {sc.frame_end}]")
+
+    def test_inverted_range_rejected(self):
+        sc = fresh_scene()
+        r = shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                              project_root="/tmp/opencode",
+                              frame_start=1160, frame_end=1001)
+        self.assertFalse(r["ok"], r)
+
+
+class TestVersionGateIsWired(unittest.TestCase):
+    """I-3：check_blender_version 原来只有测试调它，apply_preset 不调。"""
+
+    def test_apply_preset_rejects_wrong_version(self):
+        from unittest import mock
+        sc = fresh_scene()
+        with mock.patch.object(utils, "REQUIRED_VERSION_PREFIX", "9.9"):
+            r = shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                                  project_root="/tmp/opencode")
+        self.assertFalse(r["ok"], "版本不符却返回 ok=True")
+        self.assertIn("版本", r["error"])
+
+    def test_wrong_version_leaves_scene_untouched(self):
+        """不符时不得已写入任何设置 —— 否则「失败」也留下了半改过的场景"""
+        from unittest import mock
+        sc = fresh_scene()
+        sc.render.resolution_x = 640
+        sc.render.resolution_y = 360
+        with mock.patch.object(utils, "REQUIRED_VERSION_PREFIX", "9.9"):
+            shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                              project_root="/tmp/opencode")
+        self.assertEqual(640, sc.render.resolution_x)
+        self.assertEqual(360, sc.render.resolution_y)
+
+    def test_hash_mismatch_only_warns_through_apply_preset(self):
+        """「hash 不符只警告」这条规则必须真的被执行过一次，
+        否则它只是一句没人跑过的约定（原测试因本机 hash 恰好相同而恒真）。"""
+        from unittest import mock
+        sc = fresh_scene()
+        with mock.patch.object(utils, "BLENDER_BUILD_HASH", "ffffffffffff"):
+            r = shot.apply_preset(sc, shot="seq010_sh010", stage="light",
+                                  project_root="/tmp/opencode")
+        self.assertTrue(r["ok"], r)
+        self.assertTrue(any("build hash" in w for w in r.get("warnings", [])),
+                        f"warnings 未带上 hash 不符: {r.get('warnings')}")
 
 
 if __name__ == "__main__":

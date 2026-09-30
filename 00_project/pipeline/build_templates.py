@@ -31,14 +31,22 @@ TEMPLATES = (
     ("tpl_lookdev_v001.blend",  "lookdev"),
 )
 
-# 每个模板建哪些 collection
+# 每个模板建哪些 collection。值必须是 COLLECTIONS 的子集（build() 会校验）——
+# 不登记的 collection 前缀会让「按 collection 排除」失去统一依据。
+#
+# ⚠️ 模板里的 collection 不是摆设：对象必须真的落在对应 collection 里。
+#    全挂在 scene root 的话，dls.md §3.2 的分环节工作流与
+#    VL_char 的「排除 ENV_ 只重渲角色」都无从谈起（plan §21.1）。
 STAGE_COLLECTIONS = {
     "layout":  ("CHR_", "ENV_", "PRP_", "GUIDE_"),
     "anim":    ("CHR_",),
     "cfx":     ("CHR_",),
     "fx":      ("FX_",),
-    "light":   ("LGT_",),
-    "lookdev": (),
+    # light：LGT_ 放灯，ENV_ 标记环境元素 —— VL_char 排除 ENV_ 就是为了
+    # 只重渲角色而不重渲环境（spec §5.2 缺口表第 3 行）
+    "light":   ("LGT_", "ENV_"),
+    # lookdev：GUIDE_ 放搭建辅助（转台 / 相机），PRP_ 放测试道具（灰球 / 色卡）
+    "lookdev": ("GUIDE_", "PRP_"),
 }
 
 # X-Rite ColorChecker Classic 24 色（sRGB 0-255 近似）
@@ -52,10 +60,28 @@ _COLORCHECKER_SRGB = (
 )
 
 
-def _new_collection(scene, name):
+def _new_collection(scene, name, parent=None):
+    """建 collection 并挂到 parent（默认 scene root collection）。"""
     coll = bpy.data.collections.new(name)
-    scene.collection.children.link(coll)
+    (parent or scene.collection).children.link(coll)
     return coll
+
+
+def _coll(scene, name):
+    """按名字取本模板已建的 collection。取不到就崩，不许返回 None 让调用方静默跳过。"""
+    coll = bpy.data.collections.get(name)
+    if coll is None:
+        raise KeyError(
+            f"collection {name} 未建（STAGE_COLLECTIONS 缺？）；"
+            f"现有: {[c.name for c in bpy.data.collections]}"
+        )
+    return coll
+
+
+def _put(coll, obj):
+    """对象挂进 collection —— 绝不 link 到 scene root。"""
+    coll.objects.link(obj)
+    return obj
 
 
 def _add_camera(name, location=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0)):
@@ -104,9 +130,9 @@ def _uv_sphere_mesh(name, radius=1.0, segments=32, rings=16):
 def _populate(scene, kind):
     """按环节补内容（对象类）。渲染设置不在这里碰，一律交给 apply_preset。"""
     if kind == "layout":
-        cam = _add_camera(utils.make_object_name("CAM", "cam"))
-        scene.collection.objects.link(cam)
-        guides = bpy.data.collections.get("GUIDE_")
+        # 相机进 GUIDE_：它不是角色/环境/道具，是搭建辅助（与 9:16 参考线同类）
+        _put(_coll(scene, "GUIDE_"), _add_camera(utils.make_object_name("CAM", "cam")))
+        guides = _coll(scene, "GUIDE_")
         for label in ("vertical", "horizontal"):
             obj = bpy.data.objects.new(
                 utils.make_object_name("GEO", f"guide_{label}"), None)
@@ -117,24 +143,28 @@ def _populate(scene, kind):
             obj.hide_render = True      # 9:16 参考线绝不能进渲染（spec §7.3）
             guides.objects.link(obj)
     elif kind == "cfx":
-        # 空 collection 标记布料工作区
-        _new_collection(scene, utils.make_object_name("CHR", "cloth"))
+        # 布料工作区：CHR_cloth 嵌在 CHR_ 下（布料是角色的子集）
+        _new_collection(scene, utils.make_object_name("CHR", "cloth"),
+                        parent=_coll(scene, "CHR_"))
     elif kind == "lookdev":
         _add_lookdev_extras(scene)
     # anim / fx：不加对象
 
 
 def _add_lookdev_extras(scene):
+    guide = _coll(scene, "GUIDE_")
+    prp = _coll(scene, "PRP_")
+
     # 转台 empty，相机 parent 上去
     turntable = bpy.data.objects.new(
         utils.make_object_name("GEO", "turntable"), None)
     turntable.empty_display_type = "PLAIN_AXES"
-    scene.collection.objects.link(turntable)
+    _put(guide, turntable)
 
     cam = _add_camera(utils.make_object_name("CAM", "cam"),
                       location=(0.0, -7.0, 1.6),
                       rotation=(1.5707963, 0.0, 0.0))
-    scene.collection.objects.link(cam)
+    _put(guide, cam)
     cam.parent = turntable
 
     # 3 个灰球：roughness 0.2 / 0.5 / 0.9
@@ -142,7 +172,7 @@ def _add_lookdev_extras(scene):
         name = utils.make_object_name("GEO", f"grayball_rough{rough}")
         ball = bpy.data.objects.new(name, _uv_sphere_mesh(name))
         ball.location = ((i - 1) * 2.4, 0.0, 1.0)
-        scene.collection.objects.link(ball)
+        _put(prp, ball)
         mat = bpy.data.materials.new(f"MAT_{name}")
         mat.use_nodes = True
         bsdf = _principled(mat)
@@ -165,7 +195,7 @@ def _add_lookdev_extras(scene):
     mesh.from_pydata(verts, [], faces)
     mesh.update()
     card = bpy.data.objects.new(name, mesh)
-    scene.collection.objects.link(card)
+    _put(prp, card)
     for i, (r, g, b) in enumerate(_COLORCHECKER_SRGB):
         mat = bpy.data.materials.new(f"MAT_cc_{i:02d}")
         mat.use_nodes = True
@@ -179,19 +209,29 @@ def _add_lookdev_extras(scene):
 
 
 def _setup_light_view_layers(scene):
-    """light 模板：apply_preset 之后建 VL_beauty / VL_char（排除 ENV_）+ 占位灯。"""
+    """light 模板：建 VL_beauty / VL_char（排除 ENV_）+ 占位灯。
+
+    ⚠️ 排除失败必须炸。原来的 `if lc is not None` 会把「没有 ENV_ 可排除」
+    静默吞掉，结果 VL_char 退化成 VL_beauty 的复制品，两层渲一样的内容，
+    而 `assertTrue(any(vl.name.startswith("VL_")))` 照样绿 —— 验收把半成品
+    当成了成功。
+    """
     scene.view_layers[0].name = "VL_beauty"
     vl_char = scene.view_layers.new("VL_char")
     lc = vl_char.layer_collection.children.get("ENV_")
-    if lc is not None:
-        lc.exclude = True
+    if lc is None:
+        raise KeyError(
+            "VL_char 无可排除的 collection（light 模板必须建 ENV_）；"
+            f"现有: {[c.name for c in bpy.data.collections]}"
+        )
+    lc.exclude = True
 
     key = bpy.data.lights.new(utils.make_object_name("LGT", "key"), type="AREA")
     key.energy = 800.0
     key.size = 3.0
     key_obj = bpy.data.objects.new(key.name, key)
     key_obj.location = (3.0, -3.0, 4.0)
-    scene.collection.objects.link(key_obj)
+    _put(_coll(scene, "LGT_"), key_obj)
 
 
 def _hdri_installed(project_root):
@@ -223,6 +263,17 @@ def build(project_root, apply=False, overwrite=False):
             "warnings": [],
         }
 
+    # COLLECTIONS 是登记册：STAGE_COLLECTIONS 里出现未登记前缀就直接拒绝，
+    # 否则「按 collection 排除」会出现模板之间对不齐的名字。
+    for kind, names in STAGE_COLLECTIONS.items():
+        unknown = [n for n in names if n not in COLLECTIONS]
+        if unknown:
+            return {
+                "ok": False,
+                "error": f"{kind} 的 collection 前缀未在 COLLECTIONS 登记: {unknown}",
+                "hint": f"登记到 COLLECTIONS（{', '.join(COLLECTIONS)}）或改 STAGE_COLLECTIONS",
+            }
+
     warnings = []
     if not _hdri_installed(project_root):
         warnings.append(
@@ -244,6 +295,10 @@ def build(project_root, apply=False, overwrite=False):
         for coll_name in STAGE_COLLECTIONS[kind]:
             _new_collection(scene, coll_name)
         _populate(scene, kind)
+        # ⚠️ view layer 必须在 apply_preset **之前**建：setup_passes 作用于
+        #    所有 view layer，VL_char 建晚了就只剩 combined。
+        if kind == "light":
+            _setup_light_view_layers(scene)
         r = shot.apply_preset(scene, shot=name[:-len(".blend")], stage="light",
                               project_root=project_root)
         if not r.get("ok"):
@@ -251,8 +306,6 @@ def build(project_root, apply=False, overwrite=False):
                     "error": f"模板 {name} 渲染设置失败: {r.get('error')}",
                     "hint": r.get("hint"),
                     "written": written, "skipped": skipped, "warnings": warnings}
-        if kind == "light":
-            _setup_light_view_layers(scene)
         bpy.ops.wm.save_as_mainfile(filepath=path)
         written.append(name)
 

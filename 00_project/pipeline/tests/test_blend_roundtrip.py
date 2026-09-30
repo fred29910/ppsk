@@ -78,11 +78,51 @@ class TestStageSpecific(unittest.TestCase):
         self.assertEqual(0.0, cam_obj.data.shift_x)    # 9:16 靠安全框 + 后期裁切
         self.assertEqual(0.0, cam_obj.data.shift_y)
 
-    def test_light_has_exr_and_view_layers(self):
+    def test_light_has_exr_and_named_view_layers(self):
         sc = open_blend(os.path.join(TPL_DIR, "tpl_light_v001.blend"))
         self.assertEqual("OPEN_EXR_MULTILAYER", sc.render.image_settings.file_format)
-        self.assertTrue(any(vl.name.startswith("VL_") for vl in sc.view_layers))
+        # ⚠️ 原断言是 any(name.startswith("VL_")) —— 随便一个空层就绿。
+        #    改为断言具体的两个层名，缺一个就是没建出来。
+        self.assertEqual(["VL_beauty", "VL_char"],
+                         [vl.name for vl in sc.view_layers])
         self.assertTrue(any(o.type == "LIGHT" for o in bpy.data.objects))
+
+    def test_all_view_layers_have_the_same_passes(self):
+        """C-1：VL_char 必须是 VL_beauty 的完整数据集，不是 combined 复制品。
+
+        plan §2.2 的双轨雾（Depth + Mist）与 Vector Pass 都靠这些数据 pass。
+        """
+        sc = open_blend(os.path.join(TPL_DIR, "tpl_light_v001.blend"))
+        per_vl = {}
+        for vl in sc.view_layers:
+            per_vl[vl.name] = sorted(
+                p.identifier for p in vl.bl_rna.properties
+                if p.identifier.startswith("use_pass_") and getattr(vl, p.identifier)
+            )
+        self.assertGreaterEqual(len(per_vl), 2, list(per_vl))
+        names = list(per_vl)
+        for other in names[1:]:
+            self.assertEqual(per_vl[names[0]], per_vl[other],
+                             f"{names[0]} 与 {other} 的 pass 集合不一致 —— "
+                             "setup_passes 没覆盖到所有 view layer")
+        # 双轨雾与 Vector 依赖的数据 pass，一个都不能少
+        for need in ("use_pass_z", "use_pass_vector", "use_pass_mist",
+                     "use_pass_diffuse_color", "use_pass_combined"):
+            self.assertIn(need, per_vl[names[0]])
+
+    def test_vl_char_really_excludes_a_collection(self):
+        """C-1：排除必须真的可验证。
+
+        原来 light 模板没有 ENV_，`children.get("ENV_")` 返回 None 被
+        `if lc is not None` 静默吞掉，VL_char 零排除 —— 两层渲一样的内容。
+        """
+        sc = open_blend(os.path.join(TPL_DIR, "tpl_light_v001.blend"))
+        vl_char = next(vl for vl in sc.view_layers if vl.name == "VL_char")
+        excluded = [lc.name for lc in vl_char.layer_collection.children if lc.exclude]
+        self.assertTrue(excluded, "VL_char 没有任何 collection 被排除")
+        self.assertIn("ENV_", excluded)
+        # 排除要在真正渲染时才起作用，所以被排除的层必须还在文件里
+        self.assertIn("ENV_", bpy.data.collections)
 
     def test_anim_has_no_camera(self):
         open_blend(os.path.join(TPL_DIR, "tpl_anim_v001.blend"))
@@ -93,6 +133,75 @@ class TestStageSpecific(unittest.TestCase):
         names = [o.name for o in bpy.data.objects]
         self.assertGreaterEqual(len([n for n in names if "grayball" in n]), 3)
         self.assertTrue(any("colorchecker" in n for n in names), "缺少 ColorChecker 色卡")
+
+
+class TestObjectsLiveInCollections(unittest.TestCase):
+    """I-7：所有对象挂在 scene root 时，collection 骨架形同虚设。
+
+    dls.md §3.2 的分环节工作流与 VL_char 的按 collection 排除都依赖
+    对象真的在 collection 里。用 bpy.data.objects 扫描的测试结构上
+    发现不了这个问题 —— 必须显式查 users_collection。
+    """
+
+    def _objects_by_collection(self):
+        out = {}
+        for c in bpy.data.collections:
+            for o in c.objects:
+                out.setdefault(o.name, []).append(c.name)
+        return out
+
+    def test_no_object_is_left_in_scene_root(self):
+        for name, _ in build_templates.TEMPLATES:
+            with self.subTest(template=name):
+                sc = open_blend(os.path.join(TPL_DIR, name))
+                self.assertEqual([], list(sc.collection.objects),
+                                 "有对象挂在 scene root，没进任何 collection")
+
+    def test_every_object_is_in_a_registered_collection(self):
+        for name, _ in build_templates.TEMPLATES:
+            with self.subTest(template=name):
+                open_blend(os.path.join(TPL_DIR, name))
+                for obj_name, colls in self._objects_by_collection().items():
+                    self.assertTrue(
+                        any(c in build_templates.COLLECTIONS for c in colls),
+                        f"{obj_name} 在 {colls}，都不在 COLLECTIONS 登记册里")
+
+    def test_layout_camera_and_guides_are_in_collections(self):
+        sc = open_blend(os.path.join(TPL_DIR, "tpl_layout_v001.blend"))
+        by_coll = self._objects_by_collection()
+        self.assertIn("CAM_cam", by_coll)
+        for obj_name in ("CAM_cam", "GEO_guide_vertical"):
+            self.assertTrue(
+                any(c in build_templates.COLLECTIONS for c in by_coll[obj_name]),
+                f"{obj_name} 不属于任何 CHR_/ENV_/PRP_/GUIDE_ collection")
+        self.assertIn("GUIDE_", by_coll["CAM_cam"])
+
+    def test_lookdev_has_collections(self):
+        """lookdev 原来一个 collection 都没有"""
+        open_blend(os.path.join(TPL_DIR, "tpl_lookdev_v001.blend"))
+        for c in build_templates.STAGE_COLLECTIONS["lookdev"]:
+            self.assertIn(c, bpy.data.collections)
+        self.assertTrue(build_templates.STAGE_COLLECTIONS["lookdev"])
+
+    def test_stage_collection_prefixes_are_registered(self):
+        """COLLECTIONS 从前是死常量。现在它约束 STAGE_COLLECTIONS。"""
+        for kind, names in build_templates.STAGE_COLLECTIONS.items():
+            for n in names:
+                self.assertIn(n, build_templates.COLLECTIONS,
+                              f"{kind} 用了未登记的前缀 {n}")
+
+    def test_light_template_has_env_collection_to_exclude(self):
+        """C-1 前置：没有 ENV_ 就没什么可排除的"""
+        open_blend(os.path.join(TPL_DIR, "tpl_light_v001.blend"))
+        self.assertIn("ENV_", bpy.data.collections)
+
+    def test_cfx_cloth_is_nested_under_chr(self):
+        open_blend(os.path.join(TPL_DIR, "tpl_cfx_v001.blend"))
+        cloth = bpy.data.collections.get("CHR_cloth")
+        self.assertIsNotNone(cloth, "缺少 CHR_cloth 工作区")
+        parents = [c.name for c in bpy.data.collections if cloth.name in c.children]
+        self.assertIn("CHR_", parents,
+                      f"CHR_cloth 应嵌在 CHR_ 下，实际父级 {parents}")
 
 
 class TestBuildBehavior(unittest.TestCase):

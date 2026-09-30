@@ -59,7 +59,7 @@ def check_blender_version(strict: bool = True) -> dict:
     bh = bpy.app.build_hash
     bh = bh.decode() if isinstance(bh, bytes) else bh
 
-    if not ver.startswith(utils_required := REQUIRED_VERSION_PREFIX + "."):
+    if not ver.startswith(REQUIRED_VERSION_PREFIX + "."):
         msg = f"Blender 版本不符: {ver} 需 {REQUIRED_VERSION_PREFIX}.x"
         if strict:
             raise SystemExit(f"[FATAL] {msg}\n  项目锁 {BLENDER_VERSION}，不跨 major.minor 混用")

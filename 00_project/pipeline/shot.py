@@ -170,17 +170,40 @@ def setup_output(scene, shot: str, stage: str, version: str, project_root: str =
 
 
 def setup_passes(scene, passes=None) -> dict:
-    """开启 View Layer Pass。只开实测存在的，不静默失败。"""
-    vl = scene.view_layers[0]
+    """开启 View Layer Pass。只开实测存在的，不静默失败。
+
+    ⚠️ 作用于**所有** view layer。只设 view_layers[0] 会让 VL_char 只剩
+    combined + cryptomatte，z / vector / mist / diffuse_color 全缺，
+    渲出来是残缺数据集 —— plan §2.2 的双轨雾（Depth + Mist）与 Vector Pass
+    都靠这些数据 pass；spec §5.2 把「无 View Layer 分层」列为必须补齐的缺口。
+    """
     want = passes or AVAILABLE_PASSES
-    enabled, skipped = [], []
-    for p in want:
-        if hasattr(vl, p):
-            setattr(vl, p, True)
-            enabled.append(p)
-        else:
-            skipped.append(p)
-    return {"ok": True, "enabled": enabled, "skipped": skipped}
+    per_layer, skipped = {}, set()
+    for vl in scene.view_layers:
+        enabled = []
+        for p in want:
+            if hasattr(vl, p):
+                setattr(vl, p, True)
+                enabled.append(p)
+            else:
+                skipped.add(p)
+        per_layer[vl.name] = enabled
+    return {
+        "ok": True,
+        "enabled": sorted(set().union(*per_layer.values()) if per_layer else set()),
+        "per_layer": per_layer,
+        "skipped": sorted(skipped),
+    }
+
+
+def template_frame_range() -> tuple[int, int]:
+    """模板占位帧范围：FRAME_START 起，前后各 HANDLE_FRAMES。
+
+    ⚠️ 这是**模板占位值**，不是任何真实镜头的范围。生产渲染必须显式传
+    frame_start / frame_end —— setup_render 在拿不到时直接失败，
+    绝不静默渲 17 帧（静默渲错帧数比直接失败危险得多）。
+    """
+    return utils.FRAME_START, utils.FRAME_START + 2 * utils.HANDLE_FRAMES
 
 
 def apply_preset(
@@ -192,13 +215,19 @@ def apply_preset(
     view_transform: str | None = None,
     engine: str = "EEVEE",
     project_root: str = ".",
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> dict:
     """
     渲染设置唯一入口。setup_render 与 build_templates 共用这一份实现。
 
-    覆盖：分辨率 / fps / 公制单位 / 帧范围（1001 起 + 8 handles）/
-    快门 0.5 帧 / 运动模糊关 + Vector 开 / 色彩四元组 / EXR multilayer /
-    帧序列 #### 占位符 / 全部可用 View Layer Pass。
+    覆盖：分辨率 / fps / 公制单位 / 帧范围 / 快门 0.5 帧 /
+    运动模糊关 + Vector 开 / 色彩四元组 / EXR multilayer /
+    帧序列 #### 占位符 / 全部可用 View Layer Pass（**所有** layer）。
+
+    帧范围：frame_start / frame_end 都为 None 时用 template_frame_range()
+    占位（模板生成器走这条）；任一有值就用传入值（生产渲染走这条）。
+    只给一个也合法：另一个落到对应默认值。
 
     ⚠️ 不设 volumetric_samples / taa_render_samples：本机无 GPU，
     采样数由渲染机决定（spec §11）。
@@ -207,12 +236,28 @@ def apply_preset(
         return {"ok": False, "error": f"未知环节: {stage}",
                 "hint": f"合法值: {', '.join(STAGES)}"}
 
+    # 版本闸门在任何设置写入之前。5.2 的场景序列化格式与 RNA 行为都可能被
+    # 小版本改掉，跨版本写出的 .blend 是「打开就报错」的那种坏。
+    # spec §10.4：版本号前两段 ≠ 5.2 → 退出码非 0。build hash 不同只警告
+    # （本机是 dev build，官方发行版 hash 必然不同，硬失败等于永久挡住）。
+    ver = utils.check_blender_version(strict=False)
+    if not ver.get("ok"):
+        return {"ok": False, "error": ver.get("error"), "hint": ver.get("hint")}
+
+    placeholder_fs, placeholder_fe = template_frame_range()
+    fs = placeholder_fs if frame_start is None else frame_start
+    fe = placeholder_fe if frame_end is None else frame_end
+    if fe < fs:
+        return {"ok": False,
+                "error": f"帧范围非法: end({fe}) < start({fs})",
+                "hint": "frame_start / frame_end 取自 00_project/pipeline/shotlist.csv"}
+
     # 引擎交给 set_engine 处理（"EEVEE"→"BLENDER_EEVEE" / "CYCLES" 分支）
     scene.unit_settings.system = "METRIC"
     scene.unit_settings.scale_length = 1.0
-    scene.frame_start = utils.FRAME_START
-    scene.frame_end = utils.FRAME_START + 2 * utils.HANDLE_FRAMES
-    scene.frame_current = utils.FRAME_START + utils.HANDLE_FRAMES
+    scene.frame_start = fs
+    scene.frame_end = fe
+    scene.frame_current = min(max(utils.FRAME_START + utils.HANDLE_FRAMES, fs), fe)
     # ⚠️ 单位是帧不是角度（utils.shutter_frames 已封装换算）
     scene.render.motion_blur_shutter = utils.shutter_frames()
     scene.render.use_motion_blur = False   # D7：与 Vector Pass 互斥，选后者
@@ -229,7 +274,7 @@ def apply_preset(
                 "error": "; ".join(f"{k}: {v['error']}" for k, v in failed.items()),
                 "hint": "见 g0_feasibility_report.md 附录",
                 **res}
-    return {"ok": True, "warnings": [], **res}
+    return {"ok": True, "warnings": list(ver.get("warnings") or []), **res}
 
 
 # ============================================================ 镜头
@@ -238,12 +283,17 @@ def apply_preset(
 def create_shot(
     seq: str,
     shot: str,
-    frame_start: int = 1001,
-    frame_end: int = 1136,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
     project_root: str = ".",
     dry_run: bool = False,
 ) -> dict:
-    """从镜头表创建目录结构"""
+    """从镜头表创建目录结构。
+
+    frame_start / frame_end 是 per-shot 数据（shotlist.csv），**只回显到返回值**，
+    不写 scene 的帧范围 —— 帧范围由 setup_render / apply_preset 按传参设置。
+    留空就回显 None，不猜：猜出来的 17 帧 / 1136 帧没人能分辨真假。
+    """
     shot_name = f"seq{int(seq):03d}_sh{int(shot):03d}"
     base = os.path.join(project_root, "06_shots", shot_name)
     dirs = [os.path.join(base, s) for s in STAGES]
@@ -286,6 +336,8 @@ def setup_render(
     view_transform: str | None = None,
     project_root: str = ".",
     dry_run: bool = False,
+    frame_start: int | None = None,
+    frame_end: int | None = None,
 ) -> dict:
     """
     分辨率 / 帧率 / 色彩管理 / View Layer / Pass / 输出路径
@@ -293,12 +345,26 @@ def setup_render(
     view_transform 默认 None，由 apply_preset 兜底成 utils.VIEW_TRANSFORM
     （AgX）。G0-T4 实测 AgX 会让青色自发光发白，
     关键 FX 镜头（sh020/030/040）应传 "Khronos PBR Neutral"。
+
+    frame_start / frame_end 是**必填**（两者都给或至少不给全 None）：
+    帧范围是 per-shot 数据（shotlist.csv），不是常量。拿不到就返回
+    ok:False，绝不落回模板占位 17 帧。
     """
     if stage not in STAGES:
         return {
             "ok": False,
             "error": f"未知环节: {stage}",
             "hint": f"合法值: {', '.join(STAGES)}",
+        }
+    # ⚠️ 帧范围缺失直接失败。apply_preset 落到模板占位（17 帧）会让
+    #    6 秒镜只渲 17 帧且不报错 —— 这正是要消灭的静默失效。
+    if frame_start is None and frame_end is None:
+        return {
+            "ok": False,
+            "error": "未指定帧范围",
+            "hint": "从 00_project/pipeline/shotlist.csv 读该镜的 "
+                    "frame_start/frame_end，或显式传参 "
+                    "setup_render(..., frame_start=..., frame_end=...)",
         }
     if dry_run:
         return {
@@ -307,8 +373,12 @@ def setup_render(
             "stage": stage,
             "engine": engine,
             "view_transform": view_transform,
+            "frame_start": frame_start,
+            "frame_end": frame_end,
             "dry_run": True,
-            "note": "未写盘。执行内容：引擎/色彩四元组/1920x1080@24fps/EXR multilayer/Available Passes",
+            "note": f"未写盘。执行内容：引擎/色彩四元组/"
+                    f"{utils.RESOLUTION[0]}x{utils.RESOLUTION[1]}@{utils.FPS}fps/"
+                    f"EXR multilayer/Available Passes",
         }
 
     try:
@@ -322,7 +392,8 @@ def setup_render(
 
     scene = bpy.context.scene
     r = apply_preset(scene, shot=shot, stage=stage, engine=engine,
-                     view_transform=view_transform, project_root=project_root)
+                     view_transform=view_transform, project_root=project_root,
+                     frame_start=frame_start, frame_end=frame_end)
     if not r.get("ok"):
         return {"ok": False, "error": r.get("error"), "hint": r.get("hint")}
     return {"ok": True, "shot": shot, "stage": stage, **r}
@@ -349,6 +420,9 @@ def main():
     p.add_argument("--create_shot", nargs=4, metavar=("SEQ", "SHOT", "START", "END"))
     p.add_argument("--setup_camera", nargs=2, metavar=("SHOT", "FOCAL"))
     p.add_argument("--setup_render", nargs=2, metavar=("SHOT", "STAGE"))
+    p.add_argument("--frame-range", nargs=2, type=int, metavar=("START", "END"),
+                   help="该镜真实帧范围（shotlist.csv）。--setup_render 必填，"
+                        "缺失直接失败，不落回模板占位 17 帧")
     p.add_argument("--engine", default="EEVEE", choices=["EEVEE", "CYCLES"])
     p.add_argument(
         "--view-transform",
@@ -360,22 +434,29 @@ def main():
     a = p.parse_args(_argv())
 
     if a.create_shot:
-        print(create_shot(*a.create_shot, project_root=a.project_root, dry_run=a.dry_run))
+        r = create_shot(*a.create_shot, project_root=a.project_root, dry_run=a.dry_run)
     elif a.setup_camera:
-        print(setup_camera(*a.setup_camera))
+        r = setup_camera(*a.setup_camera)
     elif a.setup_render:
-        print(
-            setup_render(
-                *a.setup_render,
-                engine=a.engine,
-                view_transform=a.view_transform,
-                project_root=a.project_root,
-                dry_run=a.dry_run,
-            )
+        fs, fe = a.frame_range if a.frame_range else (None, None)
+        r = setup_render(
+            *a.setup_render,
+            engine=a.engine,
+            view_transform=a.view_transform,
+            project_root=a.project_root,
+            dry_run=a.dry_run,
+            frame_start=fs,
+            frame_end=fe,
         )
     else:
         p.print_help()
+        return 0
+
+    print(r)
+    # ⚠️ Blender 抛未捕获异常时退出码仍是 0，只有显式 sys.exit(N) 才传播。
+    #    失败路径必须返回非 0，否则 CI / 调度器看到的是「成功」。
+    return 0 if r.get("ok") else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
