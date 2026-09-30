@@ -581,7 +581,10 @@ flowchart LR
 - 所有函数返回 `dict`，成功含 `{"ok": True, ...}`，失败含 `{"ok": False, "error": str, "hint": str}`；
 - **只读函数绝不写盘**；写盘函数必须 `--dry-run` 可用；
 - 所有函数接受 `--project-root`，不使用硬编码路径；
-- 启动即校验 Blender 版本 == `5.2.0`，不匹配直接退出（`pipeline/utils.py` 的 `check_blender_version()` 已实现）。
+- 启动即校验 Blender 版本 == `5.2.0`，不匹配直接退出 —— `pipeline/utils.py` 的 `check_blender_version()`；
+  **接入点是 `shot.apply_preset()` 开头**（`pipeline/shot.py`），不符时直接返回 `{"ok": False}` 且不改场景任何设置。
+  三个入口脚本都经 `apply_preset` 或直接调它，所以一处接入即覆盖。
+  build hash 不符**只警告**（本机是 dev build，官方发行版 hash 必然不同，硬失败等于永久挡住）。
 
 ### 12.2 适合本项目的 AI Agent 任务
 
@@ -935,7 +938,7 @@ Demo 的目的是"验证管线与风格"（第 3 行自己写的），所以成�
 ### 22.1 已有进度（仓库现状）
 
 - [x] 目录结构（`dls.md` §3.1）
-- [x] Project Bible 初稿（`00_project/bible/project_bible.md`）— **需按 §7.1/§7.2 反向更新**
+- [x] Project Bible **定稿**（`00_project/bible/project_bible.md`）— 已按 §7.1/§7.2 反向更新，明细见 §22.3
 - [ ] 管线 API 骨架 5 模块 1007 行（`asset.py` / `shot.py` / `cache.py` / `review.py` / `utils.py`）— ⚠️ `asset.py` 与 `cache.py` 至今全是 `# TODO` 空壳，仅 `utils.py` / `shot.py` / `review.py` 有实际实现
 - [x] 模板文档 4 份（`layout_template.md` / `render_template.md` / `rig_base.md` / `lookdev_scene.md`）
 - [ ] 镜头目录骨架（`seq040/sh020/`）— ⚠️ 存在但与镜头表 `SEQ010` 冲突，需重新编号或删除

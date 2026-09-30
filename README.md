@@ -6,12 +6,34 @@
 
 ## 快速开始
 
-1. 用 Blender **5.2.0 LTS** 打开 `00_project/templates/` 下的模板文件。
-2. 核对 `00_project/bible/project_bible.md`（首次开工前必须按 `docs/plan.md` §7 反向更新）。
-3. **先跑 G0 技术可行性验证**（`docs/plan.md` §5.0），不通过不要进入资产制作。
-4. 用管线脚本创建第一个镜头（见 `00_project/pipeline/`）。
+> **模板需先生成。** `.blend` 已进 `.gitignore`（plan §15），所以干净 clone 里
+> `00_project/templates/` 下**一个模板都没有**，直接「打开模板」会打开空目录。
+>
+> ```bash
+> blender -b --factory-startup --python 00_project/pipeline/build_templates.py -- \
+>     --project-root . --apply
+> ```
+>
+> 已存在的 `.blend` 默认跳过（保护 GUI 里的手工修改），确实要重建才加 `--overwrite`。
+> 先 dry-run 看计划：去掉 `--apply`。
+
+1. 生成并用 Blender **5.2.0 LTS** 打开 `00_project/templates/` 下的 6 个模板
+   （Layout / Anim / CFX / FX / Light / LookDev）。
+2. 核对 `00_project/bible/project_bible.md`（已按 `docs/plan.md` §7.1/§7.2 定稿反向更新）。
+3. G0 技术可行性验证**已完成**，报告在 `00_project/bible/g0_feasibility_report.md`（plan §5.0）。
+   开工前仍需补的是**色彩全链路验证**（plan §9.1）——「不通过不要进入资产制作」这条仍然有效。
+4. 用管线脚本创建第一个镜头（见 `00_project/pipeline/`）。⚠️ `--setup_render`
+   **必须**带 `--frame-range`（取自 `00_project/pipeline/shotlist.csv`），
+   缺了会直接失败而不是落回模板占位范围。
 5. 提交渲染前检查贴图路径、帧范围、输出路径（`docs/plan.md` §11 性能预算 / §7.4 EEVEE 约束）。
-6. 规格以 `00_project/pipeline/utils.py` 为唯一机器可读来源。改规格的顺序是：先改 `utils.py` → 再改本文件 → 跑 `cd 00_project/pipeline && python3 -m unittest discover -s tests -t .`
+6. 规格以 `00_project/pipeline/utils.py` 为唯一机器可读来源。改规格的顺序是：
+   先改 `utils.py` → 再改 `00_project/bible/project_bible.md`（测试断言的是它，不是本文件）→
+   跑 `cd 00_project/pipeline && python3 -m unittest discover -s tests -t .`。
+   收紧验收（必须零命中）：
+
+   ```bash
+   grep -rn '1920\|1080\|"24"\|1001\|1136' 00_project/pipeline/*.py | grep -v '^00_project/pipeline/utils.py'
+   ```
 
 ## 目录说明
 
@@ -47,7 +69,7 @@
 
 **待办**
 
-- [x] 模板 .blend（6 个：Layout / Anim / CFX / FX / Light / LookDev）
+- [x] 模板 .blend（6 个：Layout / Anim / CFX / FX / Light / LookDev）— ⚠️ `.blend` 在 `.gitignore` 里，需按「快速开始」用 `build_templates.py --apply` 生成，干净 clone 里默认没有
 - [x] LookDev 场景 — 灰球 / 色卡 / 转台相机已就位；**HDRI 未安装**（`05_assets/lib/hdri/` 不存在），模板只留 World 槽位不伪造纯色环境。HDRI 属 plan §22.4 / §16 授权登记，待补
 - [ ] 角色绑定基础（表情 shape keys，无口型集）
 - [ ] 仙侠 FX 资产库（P0 三种）
