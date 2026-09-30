@@ -141,6 +141,18 @@ class TestBuildBehavior(unittest.TestCase):
         with open(target, "rb") as f:
             self.assertNotEqual(b"hand edited in gui", f.read())
 
+    def test_apply_preset_failure_stops_build(self):
+        """apply_preset 失败时不得存盘、不得记为 written、build 必须返回 ok=False"""
+        from unittest import mock
+        root = tmp_root()
+        tpl_dir = os.path.join(root, "00_project", "templates")
+        bad = {"ok": False, "error": "View Transform 未生效", "hint": "检查 OCIO 配置"}
+        with mock.patch.object(build_templates.shot, "apply_preset", return_value=bad):
+            r = build_templates.build(root, apply=True, overwrite=False)
+        self.assertFalse(r["ok"])
+        self.assertNotIn("tpl_layout_v001.blend", r.get("written", []))
+        self.assertFalse(os.path.exists(os.path.join(tpl_dir, "tpl_layout_v001.blend")))
+
 
 if __name__ == "__main__":
     _suite = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])

@@ -244,8 +244,13 @@ def build(project_root, apply=False, overwrite=False):
         for coll_name in STAGE_COLLECTIONS[kind]:
             _new_collection(scene, coll_name)
         _populate(scene, kind)
-        shot.apply_preset(scene, shot=name[:-len(".blend")], stage="light",
-                          project_root=project_root)
+        r = shot.apply_preset(scene, shot=name[:-len(".blend")], stage="light",
+                              project_root=project_root)
+        if not r.get("ok"):
+            return {"ok": False,
+                    "error": f"模板 {name} 渲染设置失败: {r.get('error')}",
+                    "hint": r.get("hint"),
+                    "written": written, "skipped": skipped, "warnings": warnings}
         if kind == "light":
             _setup_light_view_layers(scene)
         bpy.ops.wm.save_as_mainfile(filepath=path)
